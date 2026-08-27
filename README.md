@@ -48,7 +48,7 @@ Dynamic Island is designed to sit by itself on a fully transparent, always on to
 
 ## Notes
 
-This targets Plasma 6 and uses the modules available on this machine:
+This targets Plasma 6 and uses the modules:
 
 - `org.kde.plasma.private.mpris`
 - `org.kde.notificationmanager`
