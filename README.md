@@ -1,6 +1,18 @@
-# KDE Plasma Dynamic Island
+<p align="center">
+  <img src="assets/readme-banner.svg" alt="Dynamic Island for KDE Plasma 6">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/KDE%20Plasma-6-1d99f3?style=for-the-badge&logo=kde&logoColor=white" alt="KDE Plasma 6">
+  <img src="https://img.shields.io/badge/Status-Alpha-f59e0b?style=for-the-badge" alt="Alpha status">
+  <img src="https://img.shields.io/badge/License-GPL--3.0--or--later-22c55e?style=for-the-badge" alt="GPL-3.0-or-later license">
+</p>
 
 A KDE Plasma 6 widget inspired by the iOS/macOS Dynamic Island: a compact black pill for live activity plus a dark floating control-center popup.
+
+## Alpha Warning
+
+This applet is currently in an alpha state. It is usable, but bugs, visual glitches, missing edge cases, or Plasma-version-specific issues may happen while the widget is still evolving.
 
 ## Features
 
