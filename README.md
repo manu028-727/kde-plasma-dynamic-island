@@ -1,4 +1,4 @@
-# Dynamic Island Plasmoid
+# KDE Plasma Dynamic Island
 
 A KDE Plasma 6 widget inspired by the iOS/macOS Dynamic Island: a compact black pill for live activity plus a dark floating control-center popup.
 
@@ -30,6 +30,10 @@ kpackagetool6 --type Plasma/Applet --upgrade .
 
 Then add **Dynamic Island** from Plasma's widget picker.
 
+## Intended Panel Setup
+
+Dynamic Island is designed to sit by itself on a fully transparent, always on top, floating Plasma panel whose width is set to fit its contents. For the intended look and behavior, make the panel content-wide, enable floating mode, remove any panel background/opacity, and keep Dynamic Island as the only widget on that panel.
+
 ## Notes
 
 This targets Plasma 6 and uses the modules available on this machine:
@@ -47,4 +51,15 @@ Downloads appear when the app reports them as Plasma jobs, such as file copies o
 
 ## License
 
-GPL-3.0-or-later.
+This project is licensed under the **GNU General Public License v3.0 or later** (GPL-3.0-or-later). The complete license text is available in [LICENSE](LICENSE) and on the [GNU website](https://www.gnu.org/licenses/gpl-3.0.html).
+
+In practical terms, the GPL allows you to:
+
+- Use the widget for any purpose, including personal or commercial use.
+- Study how it works and modify the QML or other project files.
+- Make and share copies of the original project.
+- Share modified versions, including as part of another project.
+
+If you distribute the original or a modified version, you must keep the GPL license and copyright notices, provide recipients with the corresponding source code (or a valid written offer for it), and license the distributed work under the GPL. You should also state clearly what you changed. The license does not require you to publish private modifications that you never distribute.
+
+The software is provided **without warranty**, as described in the GPL. The license covers this project; KDE Plasma and any other software, services, media, or artwork that you use with the widget may have their own licenses and terms.
