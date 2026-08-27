@@ -1,0 +1,24 @@
+.agents/
+.codex/
+
+# Local development backups
+*.backup
+*.backup-*
+*.bak
+*~
+
+# Plasma/QML caches and package output
+.qmlls.ini
+qmlcache/
+*.qmlc
+*.jsc
+*.plasmoid
+*.tar.gz
+*.zip
+build/
+dist/
+
+# Desktop/editor noise
+.directory
+.DS_Store
+Thumbs.db

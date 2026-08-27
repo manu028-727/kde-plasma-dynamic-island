@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "local@example.com",
+                "Name": "Codex"
+            }
+        ],
+        "Category": "Multimedia",
+        "Description": "A Dynamic Island style pill for Plasma with media, jobs, and notifications.",
+        "EnabledByDefault": false,
+        "Icon": "media-playback-start",
+        "Id": "com.local.dynamicisland",
+        "License": "GPL-3.0-or-later",
+        "Name": "Dynamic Island",
+        "Version": "0.4.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
