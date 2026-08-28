@@ -18,8 +18,9 @@ qmlcache/
 build/
 dist/
 
-# Project assets are kept locally
-assets/
+# Keep only the README banner in Git
+assets/*
+!assets/readme-banner.svg
 
 # Desktop/editor noise
 .directory
