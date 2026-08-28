@@ -102,6 +102,104 @@ Item {
                 ctx.stroke();
                 return ;
             }
+            if (control.iconName.indexOf("apply") !== -1 || control.iconName.indexOf("ok") !== -1) {
+                ctx.beginPath();
+                ctx.moveTo(w * 0.18, h * 0.52);
+                ctx.lineTo(w * 0.42, h * 0.74);
+                ctx.lineTo(w * 0.82, h * 0.28);
+                ctx.stroke();
+                return ;
+            }
+            if (control.iconName.indexOf("edit") !== -1 || control.iconName.indexOf("document") !== -1) {
+                ctx.beginPath();
+                ctx.moveTo(w * 0.24, h * 0.72);
+                ctx.lineTo(w * 0.34, h * 0.48);
+                ctx.lineTo(w * 0.68, h * 0.14);
+                ctx.lineTo(w * 0.86, h * 0.32);
+                ctx.lineTo(w * 0.52, h * 0.66);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w * 0.28, h * 0.74);
+                ctx.lineTo(w * 0.18, h * 0.82);
+                ctx.lineTo(w * 0.34, h * 0.78);
+                ctx.stroke();
+                return ;
+            }
+            if (control.iconName.indexOf("undo") !== -1 || control.iconName.indexOf("reset") !== -1) {
+                ctx.beginPath();
+                ctx.moveTo(w * 0.34, h * 0.26);
+                ctx.lineTo(w * 0.16, h * 0.44);
+                ctx.lineTo(w * 0.34, h * 0.62);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(w * 0.54, h * 0.54, w * 0.28, Math.PI * 0.88, Math.PI * 1.95);
+                ctx.stroke();
+                return ;
+            }
+            if (control.iconName.indexOf("clear") !== -1) {
+                ctx.beginPath();
+                ctx.moveTo(w * 0.22, h * 0.32);
+                ctx.lineTo(w * 0.78, h * 0.32);
+                ctx.moveTo(w * 0.32, h * 0.32);
+                ctx.lineTo(w * 0.36, h * 0.78);
+                ctx.lineTo(w * 0.64, h * 0.78);
+                ctx.lineTo(w * 0.68, h * 0.32);
+                ctx.moveTo(w * 0.4, h * 0.22);
+                ctx.lineTo(w * 0.6, h * 0.22);
+                ctx.stroke();
+                return ;
+            }
+            if (control.iconName.indexOf("shutdown") !== -1 || control.iconName.indexOf("power") !== -1) {
+                ctx.beginPath();
+                ctx.moveTo(w * 0.5, h * 0.16);
+                ctx.lineTo(w * 0.5, h * 0.46);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.55, w * 0.3, -Math.PI * 0.72, Math.PI * 1.72);
+                ctx.stroke();
+                return ;
+            }
+            if (control.iconName.indexOf("lock") !== -1) {
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.42, w * 0.22, Math.PI, 0);
+                ctx.stroke();
+                roundFill(ctx, w * 0.22, h * 0.43, w * 0.56, h * 0.38, w * 0.09);
+                return ;
+            }
+            if (control.iconName.indexOf("suspend") !== -1 || control.iconName.indexOf("sleep") !== -1) {
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.5, w * 0.32, Math.PI * 0.08, Math.PI * 1.72);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(w * 0.64, h * 0.4, w * 0.26, Math.PI * 0.5, Math.PI * 1.72);
+                ctx.stroke();
+                return ;
+            }
+            if (control.iconName.indexOf("settings") !== -1) {
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.5, w * 0.16, 0, Math.PI * 2);
+                ctx.stroke();
+                for (let i = 0; i < 8; ++i) {
+                    const a = i * Math.PI / 4;
+                    ctx.beginPath();
+                    ctx.moveTo(w / 2 + Math.cos(a) * w * 0.27, h / 2 + Math.sin(a) * h * 0.27);
+                    ctx.lineTo(w / 2 + Math.cos(a) * w * 0.42, h / 2 + Math.sin(a) * h * 0.42);
+                    ctx.stroke();
+                }
+                return ;
+            }
+            if (control.iconName.indexOf("theme") !== -1) {
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.5, w * 0.34, Math.PI * 0.15, Math.PI * 1.85);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(w * 0.38, h * 0.39, w * 0.04, 0, Math.PI * 2);
+                ctx.arc(w * 0.54, h * 0.33, w * 0.04, 0, Math.PI * 2);
+                ctx.arc(w * 0.64, h * 0.48, w * 0.04, 0, Math.PI * 2);
+                ctx.fill();
+                return ;
+            }
             if (control.iconName.indexOf("brightness") !== -1) {
                 ctx.beginPath();
                 ctx.arc(w / 2, h / 2, w * 0.18, 0, Math.PI * 2);
@@ -112,6 +210,27 @@ Item {
                     ctx.moveTo(w / 2 + Math.cos(a) * w * 0.31, h / 2 + Math.sin(a) * h * 0.31);
                     ctx.lineTo(w / 2 + Math.cos(a) * w * 0.44, h / 2 + Math.sin(a) * h * 0.44);
                     ctx.stroke();
+                }
+                return ;
+            }
+            if (control.iconName.indexOf("display") !== -1 || control.iconName.indexOf("video") !== -1) {
+                ctx.strokeRect(w * 0.18, h * 0.22, w * 0.64, h * 0.42);
+                ctx.beginPath();
+                ctx.moveTo(w * 0.5, h * 0.64);
+                ctx.lineTo(w * 0.5, h * 0.78);
+                ctx.moveTo(w * 0.34, h * 0.78);
+                ctx.lineTo(w * 0.66, h * 0.78);
+                ctx.stroke();
+                return ;
+            }
+            if (control.iconName.indexOf("keyboard") !== -1) {
+                ctx.strokeRect(w * 0.16, h * 0.28, w * 0.68, h * 0.44);
+                for (let row = 0; row < 2; ++row) {
+                    for (let col = 0; col < 4; ++col) {
+                        ctx.beginPath();
+                        ctx.arc(w * (0.29 + col * 0.14), h * (0.42 + row * 0.14), w * 0.018, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
                 }
                 return ;
             }

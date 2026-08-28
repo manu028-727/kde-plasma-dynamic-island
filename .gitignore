@@ -18,6 +18,9 @@ qmlcache/
 build/
 dist/
 
+# Project assets are kept locally
+assets/
+
 # Desktop/editor noise
 .directory
 .DS_Store

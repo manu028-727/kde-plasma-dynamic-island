@@ -24,7 +24,8 @@ This applet is currently in an alpha state. It is usable, but bugs, visual glitc
 - Single-click idle opens the control center popup; single-click during activity reopens the activity popup; double-click opens control center.
 - Middle-click toggles media playback.
 - Scroll over the island to adjust the active player's volume.
-- Control center includes an adaptive activity summary, media controls, volume, brightness, keyboard brightness, passive wired-network status, battery state, KDE Connect, Bluetooth, display/settings shortcuts, and power actions where supported by KDE.
+- Modular control center with a JSON-backed persistent layout, graphical edit mode, drag-to-swap tiles, corner resizing, a side module palette, and a fallback default module layout.
+- Control center modules include user/host/power options, media summary, notifications with clear-all, icon-fill volume up to 100%, brightness, Wi-Fi, Wi-Fi networks, Bluetooth, Bluetooth discovery, battery, power mode, light/dark appearance, Theme shortcut, KDE Connect, and Settings.
 
 ## Install
 
@@ -60,6 +61,8 @@ This targets Plasma 6 and uses the modules:
 - `org.kde.plasma.networkmanagement`
 
 Downloads appear when the app reports them as Plasma jobs, such as file copies or browser/download integrations that use KDE notifications.
+
+The control center layout is stored in Plasma configuration as JSON and is reset automatically to a default layout when no saved layout exists. In edit mode, drag tiles onto each other to swap placement, use the corner handle to resize, drag items from the side palette to add them, or drop existing tiles onto the palette to hide them.
 
 ## License
 
