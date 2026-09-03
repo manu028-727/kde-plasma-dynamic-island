@@ -1,5 +1,6 @@
 .agents/
 .codex/
+RELEASE_CHECKLIST.md
 
 # Local development backups
 *.backup

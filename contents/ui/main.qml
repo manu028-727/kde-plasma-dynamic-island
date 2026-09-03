@@ -13,6 +13,8 @@ import org.kde.plasma.private.batterymonitor
 import org.kde.plasma.private.brightnesscontrolplugin as Brightness
 import org.kde.plasma.private.mpris as Mpris
 import org.kde.plasma.private.volume
+import "controlcenter"
+import "controlcenter/ModuleRegistry.js" as ModuleRegistry
 
 PlasmoidItem {
     id: root
@@ -53,11 +55,19 @@ PlasmoidItem {
     property string systemHostname: ""
     property string profileImageUrl: ""
     property bool bluetoothPowered: false
+    property bool bluetoothAvailable: false
+    property string bluetoothAdapterName: ""
     property string bluetoothDevicesText: ""
     property string wifiNetworksText: ""
+    property string networkDevicesText: ""
+    property string networkIpText: ""
+    property string kdeConnectDevicesText: ""
     property string popupMode: "control"
+    property string activityPopupMode: "auto"
     property int clickButton: Qt.NoButton
     property int mediaPlayerRevision: 0
+    property int lastUnreadNotificationsCount: 0
+    property int lastActiveJobsCount: 0
     property string screenBrightnessDisplayName: ""
     property int screenBrightnessValue: 0
     property int screenBrightnessMax: 100
@@ -75,12 +85,18 @@ PlasmoidItem {
     property int controlDropCol: -1
     property int controlDropRow: -1
     property bool controlDropOnPalette: false
+    property bool controlDropInvalid: false
     property bool controlResizeActive: false
     property var controlResizeSource: null
     property int controlResizeIndex: -1
     property int controlResizeWidthUnits: 1
     property int controlResizeHeightUnits: 1
+    readonly property bool controlLayoutDirty: controlEditMode && controlLayoutRevision >= 0 && !sameControlLayout(controlLayoutDraft, committedControlLayout())
     readonly property string accountIconCommand: "sh -c 'user=$(id -un); path=$(qdbus6 org.freedesktop.Accounts /org/freedesktop/Accounts org.freedesktop.Accounts.FindUserByName \"$user\" 2>/dev/null); test -n \"$path\" && qdbus6 org.freedesktop.Accounts \"$path\" org.freedesktop.Accounts.User.IconFile 2>/dev/null'"
+    readonly property string wifiScanCommand: "nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no"
+    readonly property string networkStatusCommand: "nmcli -t -f TYPE,DEVICE,STATE,CONNECTION device status"
+    readonly property string networkIpCommand: "nmcli -t -f GENERAL.DEVICE,IP4.ADDRESS device show"
+    readonly property string kdeConnectCommand: "kdeconnect-cli --list-devices"
 
     onControlEditModeChanged: {
         if (!controlEditMode)
@@ -88,24 +104,7 @@ PlasmoidItem {
 
     }
 
-    readonly property var controlModules: [
-        { "id": "userPower", "name": "User + Power" },
-        { "id": "volume", "name": "Volume" },
-        { "id": "brightness", "name": "Brightness" },
-        { "id": "wifi", "name": "Wi-Fi" },
-        { "id": "wifiDevices", "name": "Wi-Fi Networks" },
-        { "id": "bluetooth", "name": "Bluetooth" },
-        { "id": "bluetoothDiscovery", "name": "Bluetooth Discovery" },
-        { "id": "notifications", "name": "Notifications" },
-        { "id": "batteryStatus", "name": "Battery Status" },
-        { "id": "batteryPercent", "name": "Battery %" },
-        { "id": "powerMode", "name": "Power Mode" },
-        { "id": "appearanceMode", "name": "Light / Dark" },
-        { "id": "theme", "name": "Theme" },
-        { "id": "media", "name": "Media" },
-        { "id": "kdeConnect", "name": "KDE Connect" },
-        { "id": "settings", "name": "Settings" }
-    ]
+    readonly property var controlModules: ModuleRegistry.allModules()
 
     function positionIslandDialog() {
         const item = root.compactRepresentationItem || root;
@@ -163,14 +162,20 @@ PlasmoidItem {
         closeDialogTimer.restart();
     }
 
-    function bump() {
+    function bump(kind) {
         if (!hasActivity)
             return ;
 
-        showActivityPopup(true);
+        const nextMode = resolvedActivityMode(kind || "auto");
+        if (islandOpen && popupMode === "activity" && activityPopupTimer.running && activityPriority(nextMode) < activityPriority(resolvedActivityMode(activityPopupMode))) {
+            activityPopupTimer.restart();
+            return ;
+        }
+        showActivityPopup(true, nextMode);
     }
 
-    function showActivityPopup(autoClose) {
+    function showActivityPopup(autoClose, kind) {
+        activityPopupMode = resolvedActivityMode(kind || "auto");
         openIsland("activity", autoClose);
     }
 
@@ -185,7 +190,7 @@ PlasmoidItem {
             closeIsland();
             return ;
         }
-        showActivityPopup(autoClose);
+        showActivityPopup(autoClose, "auto");
     }
 
     function toggleControlCenter() {
@@ -232,13 +237,93 @@ PlasmoidItem {
         return notificationRows(0).length;
     }
 
-    function activeRow() {
+    function notificationAppName(row) {
+        const appName = cleanText(rowValue(row, NotificationManager.Notifications.ApplicationNameRole, ""));
+        if (appName.length > 0)
+            return appName;
+
+        const desktopEntry = cleanText(rowValue(row, NotificationManager.Notifications.DesktopEntryRole, ""));
+        return desktopEntry.length > 0 ? desktopEntry : "Notification";
+    }
+
+    function notificationTitle(row) {
+        const summary = cleanText(rowValue(row, NotificationManager.Notifications.SummaryRole, ""));
+        return summary.length > 0 ? summary : notificationAppName(row);
+    }
+
+    function notificationBody(row) {
+        return cleanText(rowValue(row, NotificationManager.Notifications.BodyRole, ""));
+    }
+
+    function notificationIcon(row) {
+        const image = rowValue(row, NotificationManager.Notifications.ImageRole, "");
+        if (typeof image === "string" && image.length > 0)
+            return image;
+
+        const desktopEntry = cleanText(rowValue(row, NotificationManager.Notifications.DesktopEntryRole, ""));
+        return desktopEntry.length > 0 ? desktopEntry : "notifications";
+    }
+
+    function notificationAccent(row) {
+        const urgency = rowValue(row, NotificationManager.Notifications.UrgencyRole, 1);
+        if (urgency >= 2)
+            return "#ff453a";
+        if (urgency <= 0)
+            return "#8f9099";
+        return "#ff9f0a";
+    }
+
+    function notificationLatestRow() {
+        const rows = notificationRows(1);
+        return rows.length > 0 ? rows[0] : -1;
+    }
+
+    function notificationStatusText() {
+        const count = notificationCount();
+        if (count <= 0)
+            return "Quiet";
+        if (count === 1)
+            return "1 notification";
+        return count + " notifications";
+    }
+
+    function notificationOverflowCount(limit) {
+        return Math.max(0, notificationCount() - Math.max(0, Math.round(finiteNumber(limit, 0))));
+    }
+
+    function openNotification(row) {
+        if (row < 0 || notifications.count <= row)
+            return ;
+
+        const idx = notifications.index(row, 0);
+        if (notifications.invokeDefaultAction)
+            notifications.invokeDefaultAction(idx);
+    }
+
+    function activeRowFor(kind) {
+        const mode = resolvedActivityMode(kind || "auto");
+        if (mode === "notice") {
+            const noticeRow = firstRowOfType(NotificationManager.Notifications.NotificationType);
+            if (noticeRow >= 0)
+                return noticeRow;
+        }
+
+        if (mode === "job") {
+            const jobRow = firstRowOfType(NotificationManager.Notifications.JobType);
+            if (jobRow >= 0)
+                return jobRow;
+        }
+
         const job = firstRowOfType(NotificationManager.Notifications.JobType);
         if (job >= 0)
             return job;
 
         const notice = firstRowOfType(NotificationManager.Notifications.NotificationType);
         return notice >= 0 ? notice : 0;
+    }
+
+    function activeRow() {
+        return activeRowFor("auto");
     }
 
     function cleanText(text) {
@@ -287,6 +372,7 @@ PlasmoidItem {
         controlDropCol = -1;
         controlDropRow = -1;
         controlDropOnPalette = false;
+        controlDropInvalid = false;
         controlDragSource = null;
         controlDragOffsetCol = 0;
         controlDragOffsetRow = 0;
@@ -379,32 +465,83 @@ PlasmoidItem {
         return bestScore >= 0 ? best : null;
     }
 
-    function primaryText() {
-        const row = activeRow();
-        if (hasJobs)
+    function mediaPrevious() {
+        const current = player;
+        if (current && current.canGoPrevious)
+            current.Previous();
+    }
+
+    function mediaPlayPause() {
+        const current = player;
+        if (current && (current.canPlay || current.canPause))
+            current.PlayPause();
+    }
+
+    function mediaNext() {
+        const current = player;
+        if (current && current.canGoNext)
+            current.Next();
+    }
+
+    function primaryTextFor(kind) {
+        const mode = resolvedActivityMode(kind || "auto");
+        const row = activeRowFor(mode);
+        if (mode === "job" && hasJobs)
             return cleanText(rowValue(row, NotificationManager.Notifications.SummaryRole, "Working"));
 
-        if (hasPlayer)
-            return player.track || player.identity || "Media";
-
-        if (hasNotifications)
+        if (mode === "notice" && hasNotifications)
             return cleanText(rowValue(row, NotificationManager.Notifications.SummaryRole, "Notification"));
+
+        if (mode === "media" && hasPlayer)
+            return player.track || player.identity || "Media";
 
         return "Control Center";
     }
 
-    function secondaryText() {
-        const row = activeRow();
-        if (hasJobs)
+    function primaryText() {
+        return primaryTextFor("auto");
+    }
+
+    function secondaryTextFor(kind) {
+        const mode = resolvedActivityMode(kind || "auto");
+        const row = activeRowFor(mode);
+        if (mode === "job" && hasJobs)
             return notifications.jobsPercentage >= 0 ? notifications.jobsPercentage + "%" : cleanText(rowValue(row, NotificationManager.Notifications.BodyRole, ""));
 
-        if (hasPlayer)
-            return player.artist || player.album || player.identity || "";
-
-        if (hasNotifications)
+        if (mode === "notice" && hasNotifications)
             return cleanText(rowValue(row, NotificationManager.Notifications.BodyRole, ""));
 
+        if (mode === "media" && hasPlayer)
+            return player.artist || player.album || player.identity || "";
+
         return "Brightness, audio, network, power";
+    }
+
+    function secondaryText() {
+        return secondaryTextFor("auto");
+    }
+
+    function resolvedActivityMode(kind) {
+        if (kind === "job" && hasJobs)
+            return "job";
+
+        if (kind === "notice" && hasNotifications)
+            return "notice";
+
+        if (kind === "media" && hasPlayer)
+            return "media";
+
+        return activityMode();
+    }
+
+    function activityPriority(kind) {
+        if (kind === "job")
+            return 3;
+        if (kind === "notice")
+            return 2;
+        if (kind === "media")
+            return 1;
+        return 0;
     }
 
     function activityMode() {
@@ -418,6 +555,35 @@ PlasmoidItem {
             return "notice";
 
         return "idle";
+    }
+
+    function popupActivityMode() {
+        return popupMode === "activity" ? resolvedActivityMode(activityPopupMode) : activityMode();
+    }
+
+    function activityArtworkFor(kind) {
+        return resolvedActivityMode(kind || "auto") === "media" && hasPlayer ? player.artUrl : "";
+    }
+
+    function activityProgressVisible(kind) {
+        const mode = resolvedActivityMode(kind || "auto");
+        return mode === "job" && hasJobs || mode === "media" && hasPlayer && player.length > 0;
+    }
+
+    function activityProgressTo(kind) {
+        return resolvedActivityMode(kind || "auto") === "job" ? 100 : Math.max(1, player ? player.length : 1);
+    }
+
+    function activityProgressValue(kind) {
+        return resolvedActivityMode(kind || "auto") === "job" ? Math.max(0, notifications.jobsPercentage) : player ? player.position : 0;
+    }
+
+    function activityProgressAccent(kind) {
+        return resolvedActivityMode(kind || "auto") === "job" ? "#42d77d" : "#5ac8fa";
+    }
+
+    function activityShowsMediaControls(kind) {
+        return resolvedActivityMode(kind || "auto") === "media" && hasPlayer;
     }
 
     function screenBrightnessPercent() {
@@ -569,7 +735,7 @@ PlasmoidItem {
     }
 
     function launchKdeConnectSettings() {
-        executable.exec("kcmshell6 kcm_kdeconnect");
+        executable.exec("kdeconnect-app");
     }
 
     function launchAppearanceSettings() {
@@ -609,49 +775,32 @@ PlasmoidItem {
         executable.exec("whoami");
         executable.exec("hostname");
         executable.exec(accountIconCommand);
+        refreshConnectivityState();
+    }
+
+    function refreshConnectivityState() {
         executable.exec("bluetoothctl show");
         executable.exec("bluetoothctl devices Connected");
-        executable.exec("nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no");
+        executable.exec(wifiScanCommand);
+        executable.exec(networkStatusCommand);
+        executable.exec(networkIpCommand);
+        executable.exec(kdeConnectCommand);
     }
 
     function defaultControlLayout() {
-        return [
-            { "id": "userPower", "w": 6, "h": 2, "v": 2 },
-            { "id": "batteryPercent", "w": 2, "h": 2, "v": 2 },
-            { "id": "media", "w": 8, "h": 4, "v": 2 },
-            { "id": "volume", "w": 8, "h": 2, "v": 2 },
-            { "id": "brightness", "w": 8, "h": 2, "v": 2 },
-            { "id": "wifi", "w": 2, "h": 2, "v": 2 },
-            { "id": "wifiDevices", "w": 4, "h": 2, "v": 2 },
-            { "id": "bluetooth", "w": 2, "h": 2, "v": 2 },
-            { "id": "bluetoothDiscovery", "w": 4, "h": 2, "v": 2 },
-            { "id": "notifications", "w": 4, "h": 4, "v": 2 },
-            { "id": "batteryStatus", "w": 2, "h": 2, "v": 2 },
-            { "id": "powerMode", "w": 2, "h": 2, "v": 2 },
-            { "id": "appearanceMode", "w": 2, "h": 2, "v": 2 },
-            { "id": "theme", "w": 2, "h": 2, "v": 2 },
-            { "id": "kdeConnect", "w": 2, "h": 2, "v": 2 },
-            { "id": "settings", "w": 2, "h": 2, "v": 2 }
-        ];
+        return ModuleRegistry.defaultLayout();
     }
 
     function controlModuleMinSize(id) {
-        if (id === "media" || id === "notifications")
-            return { "w": 2, "h": 2 };
-        return { "w": 1, "h": 1 };
+        return ModuleRegistry.minSize(id);
     }
 
     function controlModuleMaxSize(id) {
-        return { "w": 8, "h": id === "userPower" ? 3 : 6 };
+        return ModuleRegistry.maxSize(id);
     }
 
     function controlModuleDefaultSize(id) {
-        return {
-            "id": id,
-            "w": id === "media" || id === "volume" || id === "brightness" ? 8 : id === "notifications" || id === "wifiDevices" || id === "bluetoothDiscovery" ? 4 : 2,
-            "h": id === "media" || id === "notifications" ? 4 : 2,
-            "v": 2
-        };
+        return ModuleRegistry.defaultSize(id);
     }
 
     function clampedControlModule(id, widthUnits, heightUnits) {
@@ -718,6 +867,10 @@ PlasmoidItem {
         return out.length > 0 ? out : defaultControlLayout();
     }
 
+    function sameControlLayout(left, right) {
+        return JSON.stringify(sanitizeControlLayout(left || [])) === JSON.stringify(sanitizeControlLayout(right || []));
+    }
+
     function saveControlLayout(layout) {
         Plasmoid.configuration.controlCenterLayoutJson = JSON.stringify(sanitizeControlLayout(layout));
         controlLayoutRevision++;
@@ -748,7 +901,9 @@ PlasmoidItem {
         if (!controlEditMode)
             return ;
 
-        saveControlLayout(controlLayoutDraft);
+        if (controlLayoutDirty)
+            saveControlLayout(controlLayoutDraft);
+
         controlLayoutDraft = [];
         controlEditMode = false;
     }
@@ -796,49 +951,26 @@ PlasmoidItem {
     }
 
     function moduleInfo(id) {
-        for (let i = 0; i < controlModules.length; ++i) {
-            if (controlModules[i].id === id)
-                return controlModules[i];
-
-        }
-        return { "id": id, "name": id };
+        return ModuleRegistry.info(id);
     }
 
     function moduleIcon(id) {
-        if (id === "userPower")
-            return "user-identity";
-        if (id === "volume")
-            return "audio-volume-high";
-        if (id === "brightness")
-            return "brightness-high";
-        if (id === "wifi")
-            return enabledConnections.wirelessEnabled ? "network-wireless-on" : "network-wireless-off";
-        if (id === "wifiDevices")
-            return "network-wireless-acquiring";
-        if (id === "bluetooth" || id === "bluetoothDiscovery")
-            return "preferences-system-bluetooth";
-        if (id === "notifications")
-            return "notifications";
-        if (id === "batteryStatus" || id === "batteryPercent")
-            return batteryControl.pluggedIn ? "battery-charging" : "battery";
-        if (id === "powerMode")
-            return powerProfileIcon();
-        if (id === "appearanceMode")
-            return "preferences-desktop-theme";
-        if (id === "theme")
-            return "preferences-desktop-theme-global";
-        if (id === "media")
-            return "multimedia-player";
-        if (id === "kdeConnect")
-            return "kdeconnect";
-        if (id === "settings")
-            return "systemsettings";
-        return "unknown";
+        return ModuleRegistry.icon(id, {
+            "wifiEnabled": enabledConnections.wirelessEnabled,
+            "batteryCharging": batteryControl.pluggedIn,
+            "powerProfileIcon": powerProfileIcon()
+        });
     }
 
     function toggleWifi() {
         networkHandler.enableWireless(!enabledConnections.wirelessEnabled);
         wifiRefreshTimer.restart();
+    }
+
+    function refreshWifiNetworks() {
+        executable.exec(wifiScanCommand);
+        executable.exec(networkStatusCommand);
+        executable.exec(networkIpCommand);
     }
 
     function wifiTitle() {
@@ -850,6 +982,23 @@ PlasmoidItem {
     function wifiRows(limit) {
         const rows = [];
         const lines = root.wifiNetworksText.length > 0 ? root.wifiNetworksText.split("\n") : [];
+        const maxRows = Math.max(0, Math.round(finiteNumber(limit, 0)));
+        for (let i = 0; i < lines.length; ++i) {
+            const line = String(lines[i] || "").trim();
+            if (line.length <= 0)
+                continue;
+
+            rows.push(line);
+            if (maxRows > 0 && rows.length >= maxRows)
+                break;
+
+        }
+        return rows;
+    }
+
+    function connectedNetworkRows(limit) {
+        const rows = [];
+        const lines = root.networkDevicesText.length > 0 ? root.networkDevicesText.split("\n") : [];
         const maxRows = Math.max(0, Math.round(finiteNumber(limit, 0)));
         for (let i = 0; i < lines.length; ++i) {
             const line = String(lines[i] || "").trim();
@@ -881,9 +1030,35 @@ PlasmoidItem {
     function networkSummary() {
         if (!enabledConnections.networkingEnabled)
             return "Offline";
+        const rows = connectedNetworkRows(1);
+        if (rows.length > 0)
+            return rows[0];
         if (enabledConnections.wirelessEnabled && wifiSignalPercent() > 0)
-            return wifiSignalPercent() + "% signal";
-        return "Wired connected";
+            return wifiSignalPercent() + "% Wi-Fi signal";
+        return "Connected";
+    }
+
+    function networkTitle() {
+        if (!enabledConnections.networkingEnabled)
+            return "Offline";
+        const rows = connectedNetworkRows(1);
+        if (rows.length <= 0)
+            return enabledConnections.wirelessEnabled ? "Wi-Fi" : "Network";
+        if (rows[0].indexOf("Wired") === 0)
+            return "Wired";
+        if (rows[0].indexOf("Wi-Fi") === 0)
+            return "Wi-Fi";
+        return "Network";
+    }
+
+    function networkDetail() {
+        const rows = connectedNetworkRows(3);
+        const ip = cleanText(networkIpText);
+        if (rows.length > 0 && ip.length > 0)
+            return rows.join("\n") + "\n" + ip;
+        if (rows.length > 0)
+            return rows.join("\n");
+        return enabledConnections.networkingEnabled ? "No active connection details" : "Networking disabled";
     }
 
     function parseWifiNetworks(text) {
@@ -901,6 +1076,51 @@ PlasmoidItem {
             if (out.length >= 3)
                 break;
 
+        }
+        return out.join("\n");
+    }
+
+    function parseNetworkDevices(text) {
+        const lines = String(text || "").split("\n");
+        const out = [];
+        for (let i = 0; i < lines.length; ++i) {
+            const parts = splitNmcliFields(lines[i]);
+            if (parts.length < 4 || parts[2] !== "connected")
+                continue;
+
+            const type = parts[0];
+            const device = parts[1] || "";
+            const connection = parts[3] || device || "Connected";
+            if (type === "ethernet")
+                out.push("Wired " + connection);
+            else if (type === "wifi")
+                out.push("Wi-Fi " + connection);
+            else if (type !== "loopback")
+                out.push(connection);
+
+            if (out.length >= 3)
+                break;
+
+        }
+        return out.join("\n");
+    }
+
+    function parseNetworkAddresses(text) {
+        const lines = String(text || "").split("\n");
+        const out = [];
+        let device = "";
+        for (let i = 0; i < lines.length; ++i) {
+            const parts = splitNmcliFields(lines[i]);
+            if (parts.length < 2)
+                continue;
+
+            if (parts[0] === "GENERAL.DEVICE") {
+                device = parts[1];
+            } else if (parts[0] === "IP4.ADDRESS[1]" && parts[1].length > 0) {
+                out.push((device.length > 0 ? device + " " : "") + parts[1].replace(/\/\d+$/, ""));
+                if (out.length >= 2)
+                    break;
+            }
         }
         return out.join("\n");
     }
@@ -945,21 +1165,201 @@ PlasmoidItem {
         return out.join("\n");
     }
 
+    function parseBluetoothAvailable(text) {
+        const out = String(text || "");
+        return out.indexOf("Controller ") !== -1 || out.indexOf("Powered:") !== -1 || out.indexOf("Alias:") !== -1;
+    }
+
+    function parseBluetoothAdapterName(text) {
+        const lines = String(text || "").split("\n");
+        for (let i = 0; i < lines.length; ++i) {
+            const line = String(lines[i] || "").trim();
+            if (line.indexOf("Alias:") === 0)
+                return cleanText(line.slice(6));
+            if (line.indexOf("Name:") === 0)
+                return cleanText(line.slice(5));
+        }
+        return "";
+    }
+
+    function bluetoothDeviceCount() {
+        if (bluetoothDevicesText.length <= 0)
+            return 0;
+        return bluetoothDevicesText.split("\n").filter(function(line) {
+            return String(line || "").trim().length > 0;
+        }).length;
+    }
+
+    function bluetoothSummary() {
+        if (!bluetoothAvailable)
+            return "No adapter";
+        if (!bluetoothPowered)
+            return "Off";
+        const count = bluetoothDeviceCount();
+        if (count <= 0)
+            return "On";
+        return count === 1 ? bluetoothDevicesText.split("\n")[0] : count + " devices";
+    }
+
+    function bluetoothDetail() {
+        if (!bluetoothAvailable)
+            return "Bluetooth adapter unavailable";
+        if (!bluetoothPowered)
+            return "Radio disabled";
+        if (bluetoothDevicesText.length > 0)
+            return bluetoothDevicesText;
+        return bluetoothAdapterName.length > 0 ? bluetoothAdapterName : "No connected devices";
+    }
+
+    function parseKdeConnectDevices(text) {
+        const lines = String(text || "").split("\n");
+        const out = [];
+        const seen = {};
+        for (let i = 0; i < lines.length; ++i) {
+            const device = parseKdeConnectDeviceLine(lines[i]);
+            if (!device || device.name.length <= 0 || seen[device.name])
+                continue;
+
+            seen[device.name] = true;
+            out.push(device.name + "|" + device.id + "|" + device.status + "|" + (device.reachable ? "1" : "0") + "|" + (device.paired ? "1" : "0"));
+            if (out.length >= 3)
+                break;
+        }
+        return out.join("\n");
+    }
+
+    function parseKdeConnectDeviceLine(line) {
+        let text = cleanText(line);
+        if (text.length <= 0 || text.indexOf("0 devices found") !== -1 || text.indexOf("No devices") !== -1)
+            return null;
+
+        if (text.indexOf("- ") === 0)
+            text = text.slice(2);
+
+        let name = text;
+        let id = "";
+        let status = "";
+        const idMatch = text.match(/^(.*?):\s*([^()\s]+)\s*(?:\((.*)\))?$/);
+        if (idMatch) {
+            name = cleanText(idMatch[1]);
+            id = cleanText(idMatch[2]);
+            status = cleanText(idMatch[3] || "");
+        } else {
+            const legacyStatus = text.match(/^(.*?)\s+-\s+(.*)$/);
+            if (legacyStatus) {
+                name = cleanText(legacyStatus[1]);
+                status = cleanText(legacyStatus[2]);
+            }
+            const inlineId = name.match(/^(.*?)\s*\(id:\s*([^)]+)\)$/i);
+            if (inlineId) {
+                name = cleanText(inlineId[1]);
+                id = cleanText(inlineId[2]);
+            }
+        }
+
+        status = status.replace(/\band\b/gi, ",").replace(/\s*,\s*/g, ", ");
+        const lower = status.toLowerCase();
+        return {
+            "name": name,
+            "id": id,
+            "status": status.length > 0 ? status : "available",
+            "reachable": lower.indexOf("reachable") !== -1 || lower.indexOf("available") !== -1,
+            "paired": lower.indexOf("paired") !== -1 || lower.indexOf("trusted") !== -1
+        };
+    }
+
+    function kdeConnectSummary() {
+        if (kdeConnectDevicesText.length <= 0)
+            return "No devices";
+        const devices = kdeConnectDevices(0);
+        const reachable = kdeConnectReachableCount();
+        if (devices.length === 1)
+            return devices[0].name;
+        if (reachable > 0)
+            return reachable + " reachable";
+        return devices.length + " paired";
+    }
+
+    function kdeConnectRows(limit) {
+        const devices = kdeConnectDevices(limit);
+        const rows = [];
+        for (let i = 0; i < devices.length; ++i)
+            rows.push(devices[i].name);
+        return rows;
+    }
+
+    function kdeConnectDevices(limit) {
+        const devices = [];
+        const lines = kdeConnectDevicesText.length > 0 ? kdeConnectDevicesText.split("\n") : [];
+        const maxRows = Math.max(0, Math.round(finiteNumber(limit, 0)));
+        for (let i = 0; i < lines.length; ++i) {
+            const parts = String(lines[i]).split("|");
+            const name = cleanText(parts[0]);
+            if (name.length <= 0)
+                continue;
+
+            devices.push({
+                "name": name,
+                "id": cleanText(parts[1]),
+                "status": cleanText(parts[2] || "available"),
+                "reachable": parts[3] === "1",
+                "paired": parts[4] === "1"
+            });
+            if (maxRows > 0 && devices.length >= maxRows)
+                break;
+        }
+        return devices;
+    }
+
+    function kdeConnectReachableCount() {
+        const devices = kdeConnectDevices(0);
+        let count = 0;
+        for (let i = 0; i < devices.length; ++i) {
+            if (devices[i].reachable)
+                count++;
+        }
+        return count;
+    }
+
+    function refreshKdeConnectDevices() {
+        executable.exec("kdeconnect-cli --refresh");
+        executable.exec(kdeConnectCommand);
+    }
+
+    function shellQuote(text) {
+        return "'" + String(text || "").replace(/'/g, "'\"'\"'") + "'";
+    }
+
+    function runKdeConnectDeviceAction(deviceId, action) {
+        const id = cleanText(deviceId);
+        if (id.length <= 0)
+            return ;
+
+        if (action === "ping")
+            executable.exec("kdeconnect-cli --device " + shellQuote(id) + " --ping");
+        else if (action === "ring")
+            executable.exec("kdeconnect-cli --device " + shellQuote(id) + " --ring");
+        else if (action === "mount")
+            executable.exec("kdeconnect-cli --device " + shellQuote(id) + " --mount");
+        else if (action === "notifications")
+            executable.exec("kdeconnect-cli --device " + shellQuote(id) + " --list-notifications");
+    }
+
     function beginControlDrag(source, item, mouse, size) {
-        if (!root.controlEditMode || !dialogHost)
+        if (!root.controlEditMode || !dialogHost || !source || !item || !mouse || !item.mapToItem)
             return ;
 
         const pos = item.mapToItem(dialogHost, mouse.x, mouse.y);
         controlDragSource = source;
         controlDragIcon = moduleIcon(source.moduleId);
-        controlDragSize = size;
-        controlDragX = pos.x - size / 2;
-        controlDragY = pos.y - size / 2;
+        controlDragSize = Math.max(32, Math.min(96, finiteNumber(size, 54)));
+        controlDragX = pos.x - controlDragSize / 2;
+        controlDragY = pos.y - controlDragSize / 2;
         controlDragActive = true;
     }
 
     function updateControlDrag(item, mouse) {
-        if (!controlDragActive || !dialogHost)
+        if (!controlDragActive || !dialogHost || !item || !mouse || !item.mapToItem)
             return ;
 
         const pos = item.mapToItem(dialogHost, mouse.x, mouse.y);
@@ -970,7 +1370,7 @@ PlasmoidItem {
     }
 
     function endControlDrag(item, mouse, commit) {
-        if (commit && controlDragActive && activeControlPage && dialogHost && item && mouse) {
+        if (commit && controlDragActive && activeControlPage && dialogHost && item && mouse && item.mapToItem) {
             const pos = item.mapToItem(dialogHost, mouse.x, mouse.y);
             activeControlPage.finishControlDrop(controlDragSource, pos.x, pos.y);
         }
@@ -1109,7 +1509,7 @@ PlasmoidItem {
 
         onCurrentPlayerChanged: {
             root.mediaPlayerRevision++;
-            root.bump();
+            root.bump("media");
         }
     }
 
@@ -1136,9 +1536,12 @@ PlasmoidItem {
 
             onPlaybackStatusChanged: {
                 root.mediaPlayerRevision++;
-                root.bump();
+                root.bump("media");
             }
-            onTrackChanged: root.mediaPlayerRevision++
+            onTrackChanged: {
+                root.mediaPlayerRevision++;
+                root.bump("media");
+            }
             onArtistChanged: root.mediaPlayerRevision++
             onAlbumChanged: root.mediaPlayerRevision++
             onArtUrlChanged: root.mediaPlayerRevision++
@@ -1232,12 +1635,21 @@ PlasmoidItem {
                 root.systemHostname = out;
             else if (sourceName === root.accountIconCommand)
                 root.profileImageUrl = out.length > 0 ? (out.indexOf("file:") === 0 ? out : "file://" + out) : "";
-            else if (sourceName === "bluetoothctl show")
+            else if (sourceName === "bluetoothctl show") {
+                root.bluetoothAvailable = root.parseBluetoothAvailable(stdout);
+                root.bluetoothAdapterName = root.parseBluetoothAdapterName(stdout);
                 root.bluetoothPowered = out.indexOf("Powered: yes") !== -1;
+            }
             else if (sourceName === "bluetoothctl devices Connected")
                 root.bluetoothDevicesText = root.parseBluetoothDevices(stdout);
-            else if (sourceName === "nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no")
+            else if (sourceName === root.wifiScanCommand)
                 root.wifiNetworksText = root.parseWifiNetworks(stdout);
+            else if (sourceName === root.networkStatusCommand)
+                root.networkDevicesText = root.parseNetworkDevices(stdout);
+            else if (sourceName === root.networkIpCommand)
+                root.networkIpText = root.parseNetworkAddresses(stdout);
+            else if (sourceName === root.kdeConnectCommand)
+                root.kdeConnectDevicesText = root.parseKdeConnectDevices(stdout);
 
             disconnectSource(sourceName);
         }
@@ -1246,15 +1658,17 @@ PlasmoidItem {
     Component.onCompleted: {
         root.ensureControlLayout();
         root.refreshSystemState();
+        root.lastUnreadNotificationsCount = notifications.unreadNotificationsCount;
+        root.lastActiveJobsCount = notifications.activeJobsCount;
     }
 
     Connections {
         function onPlaybackStatusChanged() {
-            root.bump();
+            root.bump("media");
         }
 
         function onTrackChanged() {
-            root.bump();
+            root.bump("media");
         }
 
         target: root.player
@@ -1262,15 +1676,33 @@ PlasmoidItem {
 
     Connections {
         function onRowsInserted(parent, first, last) {
-            root.bump();
+            let hasInsertedNotice = false;
+            let hasInsertedJob = false;
+            for (let row = first; row <= last; ++row) {
+                const type = root.rowValue(row, NotificationManager.Notifications.TypeRole, NotificationManager.Notifications.NoType);
+                if (type === NotificationManager.Notifications.JobType)
+                    hasInsertedJob = true;
+                else if (type === NotificationManager.Notifications.NotificationType)
+                    hasInsertedNotice = true;
+            }
+            if (hasInsertedJob)
+                root.bump("job");
+            else if (hasInsertedNotice)
+                root.bump("notice");
         }
 
         function onActiveJobsCountChanged() {
-            root.bump();
+            const count = notifications.activeJobsCount;
+            if (count > root.lastActiveJobsCount)
+                root.bump("job");
+            root.lastActiveJobsCount = count;
         }
 
         function onUnreadNotificationsCountChanged() {
-            root.bump();
+            const count = notifications.unreadNotificationsCount;
+            if (count > root.lastUnreadNotificationsCount)
+                root.bump("notice");
+            root.lastUnreadNotificationsCount = count;
         }
 
         target: notifications
@@ -1319,7 +1751,7 @@ PlasmoidItem {
         repeat: false
         onTriggered: {
             if (root.clickButton === Qt.MiddleButton && root.player)
-                root.player.PlayPause();
+                root.mediaPlayPause();
             else if (root.islandOpen)
                 root.closeIsland();
             else if (root.dialogVisible)
@@ -1343,11 +1775,19 @@ PlasmoidItem {
     }
 
     Timer {
+        interval: 30000
+        repeat: true
+        running: true
+        triggeredOnStart: false
+        onTriggered: root.refreshConnectivityState()
+    }
+
+    Timer {
         id: wifiRefreshTimer
 
         interval: 900
         repeat: false
-        onTriggered: executable.exec("nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no")
+        onTriggered: root.refreshWifiNetworks()
     }
 
     PlasmaCore.Dialog {
@@ -1710,7 +2150,21 @@ PlasmoidItem {
             Layout.maximumHeight: root.popupHeight
             Layout.preferredHeight: root.popupHeight
             hoverEnabled: true
+            focus: root.popupAcceptsFocus
             acceptedButtons: Qt.LeftButton
+            Keys.onPressed: (event) => {
+                if (event.key !== Qt.Key_Escape)
+                    return ;
+
+                if (root.controlDragActive || root.controlResizeActive)
+                    root.resetControlInteractionState();
+                else if (root.controlEditMode)
+                    root.cancelControlEdit();
+                else
+                    root.closeIsland();
+
+                event.accepted = true;
+            }
             onEntered: {
                 root.popupAcceptsFocus = true;
                 if (islandDialog.requestActivate)
@@ -1787,11 +2241,11 @@ PlasmoidItem {
 
                         MaskedArtwork {
                             anchors.fill: parent
-                            artworkSource: root.hasPlayer ? root.player.artUrl : ""
+                            artworkSource: root.activityArtworkFor(root.popupActivityMode())
                             cornerRadius: Math.min(height / 2, 8 + (height / 2 - 8) * (1 - Math.min(1, popupRoot.morph / 0.34)))
-                            mode: root.activityMode()
-                            progress: Math.max(0, notifications.jobsPercentage) / 100
-                            playing: root.isPlaying
+                            mode: root.popupActivityMode()
+                            progress: root.activityProgressValue(root.popupActivityMode()) / Math.max(1, root.activityProgressTo(root.popupActivityMode()))
+                            playing: root.popupActivityMode() === "media" ? root.isPlaying : root.popupActivityMode() === "job"
                         }
 
                     }
@@ -1804,7 +2258,7 @@ PlasmoidItem {
                         Loader {
                             anchors.fill: parent
                             active: root.hasActivity
-                            sourceComponent: root.hasJobs ? compactJobIndicator : root.hasPlayer ? compactMediaIndicator : compactNoticeIndicator
+                            sourceComponent: root.popupActivityMode() === "job" ? compactJobIndicator : root.popupActivityMode() === "media" ? compactMediaIndicator : compactNoticeIndicator
                         }
 
                     }
@@ -1849,12 +2303,12 @@ PlasmoidItem {
 
                 MaskedArtwork {
                     anchors.fill: parent
-                    artworkSource: root.hasPlayer ? root.player.artUrl : ""
+                    artworkSource: root.activityArtworkFor(root.popupActivityMode())
                     cornerRadius: 16
                     glyphSize: 32
-                    mode: root.activityMode()
-                    progress: Math.max(0, notifications.jobsPercentage) / 100
-                    playing: root.isPlaying
+                    mode: root.popupActivityMode()
+                    progress: root.activityProgressValue(root.popupActivityMode()) / Math.max(1, root.activityProgressTo(root.popupActivityMode()))
+                    playing: root.popupActivityMode() === "media" ? root.isPlaying : root.popupActivityMode() === "job"
                 }
 
             }
@@ -1865,7 +2319,7 @@ PlasmoidItem {
 
                 QQC2.Label {
                     Layout.fillWidth: true
-                    text: root.primaryText()
+                    text: root.primaryTextFor(root.popupActivityMode())
                     color: "#ffffff"
                     font.pixelSize: 13
                     font.weight: Font.Bold
@@ -1875,7 +2329,7 @@ PlasmoidItem {
 
                 QQC2.Label {
                     Layout.fillWidth: true
-                    text: root.secondaryText()
+                    text: root.secondaryTextFor(root.popupActivityMode())
                     color: "#9d9da7"
                     font.pixelSize: 10
                     elide: Text.ElideRight
@@ -1885,24 +2339,24 @@ PlasmoidItem {
                 ProgressBar {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 6
-                    visible: root.hasJobs || (root.hasPlayer && root.player.length > 0)
+                    visible: root.activityProgressVisible(root.popupActivityMode())
                     from: 0
-                    to: root.hasJobs ? 100 : Math.max(1, root.player ? root.player.length : 1)
-                    value: root.hasJobs ? Math.max(0, notifications.jobsPercentage) : root.player ? root.player.position : 0
-                    accent: root.hasJobs ? "#42d77d" : "#5ac8fa"
+                    to: root.activityProgressTo(root.popupActivityMode())
+                    value: root.activityProgressValue(root.popupActivityMode())
+                    accent: root.activityProgressAccent(root.popupActivityMode())
                 }
 
             }
 
             RowLayout {
-                visible: root.hasPlayer
+                visible: root.activityShowsMediaControls(root.popupActivityMode())
                 spacing: 6
 
                 IslandButton {
                     iconName: "media-skip-backward"
                     compact: true
                     enabled: root.player && root.player.canGoPrevious
-                    onClicked: root.player.Previous()
+                    onClicked: root.mediaPrevious()
                 }
 
                 IslandButton {
@@ -1910,14 +2364,14 @@ PlasmoidItem {
                     compact: true
                     emphasized: true
                     enabled: root.player && (root.player.canPlay || root.player.canPause)
-                    onClicked: root.player.PlayPause()
+                    onClicked: root.mediaPlayPause()
                 }
 
                 IslandButton {
                     iconName: "media-skip-forward"
                     compact: true
                     enabled: root.player && root.player.canGoNext
-                    onClicked: root.player.Next()
+                    onClicked: root.mediaNext()
                 }
 
             }
@@ -1927,1817 +2381,29 @@ PlasmoidItem {
     }
 
     Component {
+        id: controlModuleCardDelegate
+
+        ControlCenterModuleCard {
+            anchors.fill: parent
+            app: root
+            hostItem: dialogHost
+            notificationsSource: notifications
+            batterySource: batteryControl
+            connectionsSource: enabledConnections
+            screenBrightnessSource: screenBrightness
+            keyboardBrightnessSource: keyboardBrightness
+            powerProfilesSource: powerProfiles
+        }
+    }
+
+    Component {
         id: controlCenterPage
 
-        Item {
-            id: controlPage
-
-            anchors.fill: parent
-
-            Component.onCompleted: root.activeControlPage = controlPage
-            Component.onDestruction: {
-                if (root.activeControlPage === controlPage)
-                    root.activeControlPage = null;
-
-            }
-
-            function containsPoint(item, x, y) {
-                if (!item || !item.visible)
-                    return false;
-
-                const p = item.mapFromItem(dialogHost, x, y);
-                return p.x >= 0 && p.y >= 0 && p.x <= item.width && p.y <= item.height;
-            }
-
-            function cellAtPoint(x, y) {
-                const p = moduleGrid.mapFromItem(dialogHost, x, y);
-                const pitch = moduleGrid.unitSize + moduleGrid.gap;
-                const size = draggedSize();
-                const maxOffsetCol = Math.max(0, gridUnitWidth(size) - 1);
-                const maxOffsetRow = Math.max(0, gridUnitHeight(size) - 1);
-                return {
-                    "col": Math.max(0, Math.min(moduleGrid.columns - 1, Math.floor(p.x / pitch) - Math.max(0, Math.min(maxOffsetCol, root.controlDragOffsetCol)))),
-                    "row": Math.max(0, Math.floor(p.y / pitch) - Math.max(0, Math.min(maxOffsetRow, root.controlDragOffsetRow)))
-                };
-            }
-
-            function draggedSize() {
-                if (!root.controlDragSource)
-                    return { "w": 1, "h": 1 };
-
-                if (root.controlDragSource.fromPalette) {
-                    const size = defaultModuleSize(root.controlDragSource.moduleId);
-                    return { "w": size.w, "h": size.h };
-                }
-
-                return {
-                    "w": root.controlDragSource.moduleWidthUnits,
-                    "h": root.controlDragSource.moduleHeightUnits
-                };
-            }
-
-            function defaultModuleSize(id) {
-                return root.controlModuleDefaultSize(id);
-            }
-
-            function visualLayout() {
-                const layout = root.controlLayout().slice();
-                const hasCellTarget = root.controlDropCol >= 0 && root.controlDropRow >= 0;
-                if (root.controlResizeActive && root.controlResizeSource && root.controlResizeIndex >= 0 && root.controlResizeIndex < layout.length) {
-                    const resized = layout.splice(root.controlResizeIndex, 1)[0];
-                    const basePlaced = packLayout([resized].concat(layout));
-                    const basePlacement = basePlaced[resized.id] || {
-                        "col": root.finiteNumber(resized.col, 0),
-                        "row": root.finiteNumber(resized.row, 0)
-                    };
-                    resized.w = root.controlResizeWidthUnits;
-                    resized.h = root.controlResizeHeightUnits;
-                    resized.col = Math.max(0, Math.min(moduleGrid.columns - gridUnitWidth(resized), Math.round(root.finiteNumber(basePlacement.col, 0))));
-                    resized.row = Math.max(0, Math.round(root.finiteNumber(basePlacement.row, 0)));
-                    layout.unshift(resized);
-                    return layout;
-                }
-
-                if (!root.controlDragActive || !root.controlDragSource || root.controlDropOnPalette || !hasCellTarget)
-                    return layout;
-
-                const placeholder = root.controlDragSource.fromPalette
-                    ? defaultModuleSize(root.controlDragSource.moduleId)
-                    : {
-                        "id": "__dropPlaceholder",
-                        "w": root.controlDragSource.moduleWidthUnits,
-                        "h": root.controlDragSource.moduleHeightUnits,
-                        "v": 2
-                    };
-                placeholder.id = "__dropPlaceholder";
-                placeholder.col = root.controlDropCol;
-                placeholder.row = root.controlDropRow;
-
-                if (root.controlDragSource.fromPalette) {
-                    const existing = layout.findIndex(item => item.id === root.controlDragSource.moduleId);
-                    if (existing >= 0)
-                        return layout;
-                } else {
-                    const from = root.controlDragSource.moduleIndex;
-                    if (from >= 0 && from < layout.length)
-                        layout.splice(from, 1);
-                }
-
-                layout.unshift(placeholder);
-                return layout;
-            }
-
-            function canPlace(occupied, col, row, w, h) {
-                if (col + w > moduleGrid.columns)
-                    return false;
-
-                for (let y = row; y < row + h; ++y) {
-                    for (let x = col; x < col + w; ++x) {
-                        if (occupied[y + ":" + x])
-                            return false;
-
-                    }
-                }
-                return true;
-            }
-
-            function occupy(occupied, col, row, w, h) {
-                for (let y = row; y < row + h; ++y) {
-                    for (let x = col; x < col + w; ++x)
-                        occupied[y + ":" + x] = true;
-
-                }
-            }
-
-            function canDropAtCell(col, row) {
-                if (!root.controlDragSource || col < 0 || row < 0)
-                    return false;
-
-                const size = draggedSize();
-                const w = gridUnitWidth(size);
-                return col + w <= moduleGrid.columns;
-            }
-
-            function gridUnitWidth(item) {
-                return Math.round(root.clampNumber(item ? item.w : 1, 1, moduleGrid.columns));
-            }
-
-            function gridUnitHeight(item) {
-                return Math.round(root.clampNumber(item ? item.h : 1, 1, 6));
-            }
-
-            function packLayout(layout) {
-                const occupied = {};
-                const placed = {};
-                let rows = 0;
-
-                for (let i = 0; i < layout.length; ++i) {
-                    const item = layout[i] || {};
-                    const w = gridUnitWidth(item);
-                    const h = gridUnitHeight(item);
-                    let row = 0;
-                    let found = false;
-                    if (isFinite(Number(item.col)) && isFinite(Number(item.row))) {
-                        const col = Math.max(0, Math.min(moduleGrid.columns - w, Math.round(item.col)));
-                        row = Math.max(0, Math.round(item.row));
-                        if (canPlace(occupied, col, row, w, h)) {
-                            occupy(occupied, col, row, w, h);
-                            placed[item.id] = { "col": col, "row": row, "w": w, "h": h, "order": i };
-                            rows = Math.max(rows, row + h);
-                            found = true;
-                        }
-                    }
-
-                    row = 0;
-                    while (!found) {
-                        for (let col = 0; col <= moduleGrid.columns - w; ++col) {
-                            if (!canPlace(occupied, col, row, w, h))
-                                continue;
-
-                            occupy(occupied, col, row, w, h);
-                            placed[item.id] = { "col": col, "row": row, "w": w, "h": h, "order": i };
-                            rows = Math.max(rows, row + h);
-                            found = true;
-                            break;
-                        }
-                        if (!found)
-                            row++;
-                    }
-                }
-
-                placed.__rows = Math.max(1, rows);
-                return placed;
-            }
-
-            function packedLayout() {
-                root.controlLayoutRevision;
-                root.controlDragActive;
-                root.controlDropOnPalette;
-                root.controlDropCol;
-                root.controlDropRow;
-                root.controlResizeActive;
-                root.controlResizeIndex;
-                root.controlResizeWidthUnits;
-                root.controlResizeHeightUnits;
-                return packLayout(visualLayout());
-            }
-
-            function placementFor(id, placedLayout) {
-                const placed = placedLayout || packedLayout();
-                return placed[id] || { "col": 0, "row": 0, "w": 1, "h": 1, "order": 0 };
-            }
-
-            function dropPlaceholderPlacement(placedLayout) {
-                if (!root.controlEditMode || !root.controlDragActive || root.controlDropOnPalette || root.controlDropCol < 0 || root.controlDropRow < 0)
-                    return { "visible": false, "col": 0, "row": 0, "w": 1, "h": 1 };
-
-                const placed = placedLayout || packedLayout();
-                const placeholder = placed.__dropPlaceholder;
-                if (!placeholder)
-                    return { "visible": false, "col": 0, "row": 0, "w": 1, "h": 1 };
-
-                return {
-                    "visible": true,
-                    "col": placeholder.col,
-                    "row": placeholder.row,
-                    "w": placeholder.w,
-                    "h": placeholder.h
-                };
-            }
-
-            function gridX(col) {
-                return col * (moduleGrid.unitSize + moduleGrid.gap);
-            }
-
-            function gridY(row) {
-                return row * (moduleGrid.unitSize + moduleGrid.gap);
-            }
-
-            function gridWidth(widthUnits) {
-                const units = Math.round(root.clampNumber(widthUnits, 1, moduleGrid.columns));
-                return units * moduleGrid.unitSize + (units - 1) * moduleGrid.gap;
-            }
-
-            function gridHeight(heightUnits) {
-                const units = Math.round(root.clampNumber(heightUnits, 1, 6));
-                return units * moduleGrid.unitSize + (units - 1) * moduleGrid.gap;
-            }
-
-            function packedHeight() {
-                const placed = packedLayout();
-                return placed.__rows * moduleGrid.unitSize + Math.max(0, placed.__rows - 1) * moduleGrid.gap;
-            }
-
-            function previewControlDrop(x, y) {
-                root.controlDropOnPalette = containsPoint(palette, x, y);
-                if (root.controlDropOnPalette || !containsPoint(moduleFlickable, x, y)) {
-                    root.controlDropCol = -1;
-                    root.controlDropRow = -1;
-                    return ;
-                }
-
-                const cell = cellAtPoint(x, y);
-                if (canDropAtCell(cell.col, cell.row)) {
-                    root.controlDropCol = cell.col;
-                    root.controlDropRow = cell.row;
-                    return ;
-                }
-
-                root.controlDropCol = -1;
-                root.controlDropRow = -1;
-            }
-
-            function finishControlDrop(source, x, y) {
-                if (!source)
-                    return ;
-
-                previewControlDrop(x, y);
-
-                if (root.controlDropOnPalette) {
-                    if (!source.fromPalette)
-                        root.removeControlModule(source.moduleIndex);
-
-                    return ;
-                }
-
-                if (root.controlDropCol >= 0 && root.controlDropRow >= 0) {
-                    commitControlDropAtCell(source, root.controlDropCol, root.controlDropRow);
-
-                    return ;
-                }
-
-                if (source.fromPalette && containsPoint(moduleFlickable, x, y))
-                    root.addControlModule(source.moduleId);
-            }
-
-            function commitControlDropAtCell(source, col, row) {
-                const layout = root.controlLayout();
-                let item = null;
-
-                if (source.fromPalette) {
-                    for (let i = 0; i < layout.length; ++i) {
-                        if (layout[i].id === source.moduleId)
-                            return ;
-                    }
-                    item = defaultModuleSize(source.moduleId);
-                } else {
-                    if (source.moduleIndex < 0 || source.moduleIndex >= layout.length)
-                        return ;
-
-                    item = layout.splice(source.moduleIndex, 1)[0];
-                }
-
-                item.col = Math.max(0, Math.min(moduleGrid.columns - gridUnitWidth(item), Math.round(col)));
-                item.row = Math.max(0, Math.round(row));
-
-                const ordered = [item].concat(layout);
-                const placed = packLayout(ordered);
-                const saved = [];
-                for (let i = 0; i < ordered.length; ++i) {
-                    const module = ordered[i];
-                    const placement = placed[module.id];
-                    if (!placement)
-                        continue;
-
-                    saved.push({
-                        "id": module.id,
-                        "w": placement.w,
-                        "h": placement.h,
-                        "col": placement.col,
-                        "row": placement.row,
-                        "v": 2
-                    });
-                }
-                root.updateControlLayout(saved);
-            }
-
-            function commitControlResize(source, widthUnits, heightUnits) {
-                const layout = root.controlLayout();
-                if (!source || source.moduleIndex < 0 || source.moduleIndex >= layout.length)
-                    return ;
-
-                const item = layout.splice(source.moduleIndex, 1)[0];
-                const basePlaced = packLayout([item].concat(layout));
-                const basePlacement = basePlaced[item.id] || {
-                    "col": root.finiteNumber(item.col, 0),
-                    "row": root.finiteNumber(item.row, 0)
-                };
-                const size = root.clampedControlModule(item.id, widthUnits, heightUnits);
-                item.w = size.w;
-                item.h = size.h;
-                item.col = Math.max(0, Math.min(moduleGrid.columns - item.w, Math.round(root.finiteNumber(basePlacement.col, 0))));
-                item.row = Math.max(0, Math.round(root.finiteNumber(basePlacement.row, 0)));
-                item.v = 2;
-
-                const ordered = [item].concat(layout);
-                const placed = packLayout(ordered);
-                const saved = [];
-                for (let i = 0; i < ordered.length; ++i) {
-                    const module = ordered[i];
-                    const placement = placed[module.id];
-                    if (!placement)
-                        continue;
-
-                    saved.push({
-                        "id": module.id,
-                        "w": placement.w,
-                        "h": placement.h,
-                        "col": placement.col,
-                        "row": placement.row,
-                        "v": 2
-                    });
-                }
-                root.updateControlLayout(saved);
-            }
-
-            RowLayout {
-                id: editBar
-
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                height: 34
-                spacing: 8
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    text: root.controlEditMode ? "Edit control center" : "Control center"
-                    color: "#f8f8fb"
-                    font.pixelSize: 13
-                    font.weight: Font.Bold
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
-                }
-
-                IslandButton {
-                    visible: !root.controlEditMode
-                    iconName: "document-edit"
-                    compact: true
-                    tooltipText: "Edit layout"
-                    onClicked: root.beginControlEdit()
-                }
-
-                IslandButton {
-                    visible: root.controlEditMode
-                    iconName: "dialog-cancel"
-                    compact: true
-                    tooltipText: "Cancel changes"
-                    onClicked: root.cancelControlEdit()
-                }
-
-                IslandButton {
-                    visible: root.controlEditMode
-                    iconName: "restore-defaults"
-                    compact: true
-                    tooltipText: "Reset draft to default"
-                    onClicked: root.resetControlLayout()
-                }
-
-                IslandButton {
-                    visible: root.controlEditMode
-                    iconName: "dialog-ok-apply"
-                    compact: true
-                    emphasized: true
-                    tooltipText: "Save layout"
-                    onClicked: root.saveControlEdit()
-                }
-            }
-
-            Flickable {
-                id: moduleFlickable
-
-                anchors.left: parent.left
-                anchors.right: root.controlEditMode ? palette.left : parent.right
-                anchors.rightMargin: root.controlEditMode ? 10 : 0
-                anchors.top: editBar.bottom
-                anchors.topMargin: 8
-                anchors.bottom: parent.bottom
-                clip: true
-                interactive: !root.controlDragActive && !root.controlResizeActive
-                contentWidth: width
-                contentHeight: moduleGrid.height
-
-                Item {
-                    id: moduleGrid
-
-                    width: parent.width
-                    height: controlPage.packedHeight()
-                    property int columns: 8
-                    property int gap: 8
-                    property real unitSize: Math.floor((width - gap * (columns - 1)) / columns)
-                    readonly property var packedLayoutState: controlPage.packedLayout()
-                    readonly property var dropPreview: controlPage.dropPlaceholderPlacement(packedLayoutState)
-
-                    Rectangle {
-                        id: dropReservedSpace
-
-                        visible: moduleGrid.dropPreview.visible
-                        x: controlPage.gridX(moduleGrid.dropPreview.col)
-                        y: controlPage.gridY(moduleGrid.dropPreview.row)
-                        width: controlPage.gridWidth(moduleGrid.dropPreview.w)
-                        height: controlPage.gridHeight(moduleGrid.dropPreview.h)
-                        radius: Math.min(18, Math.min(width, height) / 2)
-                        color: "#171824"
-                        border.color: "#8e8eff"
-                        border.width: 2
-                        opacity: visible ? 0.92 : 0
-                        z: 0
-
-                        Behavior on x {
-                            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
-                        }
-
-                        Behavior on y {
-                            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
-                        }
-
-                        Behavior on width {
-                            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
-                        }
-
-                        Behavior on height {
-                            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            anchors.margins: 5
-                            radius: Math.max(1, parent.radius - 5)
-                            color: "transparent"
-                            border.color: "#3e4052"
-                            border.width: 1
-                            opacity: 0.85
-                        }
-
-                        Kirigami.Icon {
-                            anchors.centerIn: parent
-                            width: Math.max(16, Math.min(30, parent.width - 18, parent.height - 18))
-                            height: width
-                            source: root.controlDragIcon
-                            color: "#d8d8ff"
-                            opacity: 0.62
-                        }
-                    }
-
-                    Repeater {
-                        id: moduleRepeater
-
-                        model: root.controlLayout()
-
-                        ModuleCard {
-                            required property var modelData
-                            required property int index
-
-                            readonly property var packed: controlPage.placementFor(modelData.id, moduleGrid.packedLayoutState)
-
-                            x: controlPage.gridX(packed.col)
-                            y: controlPage.gridY(packed.row)
-                            width: controlPage.gridWidth(packed.w)
-                            height: controlPage.gridHeight(packed.h)
-                            moduleId: modelData.id
-                            moduleIndex: index
-                            moduleWidthUnits: controlPage.gridUnitWidth(modelData)
-                            moduleHeightUnits: controlPage.gridUnitHeight(modelData)
-                            gridUnitSize: moduleGrid.unitSize
-                            gridGap: moduleGrid.gap
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                id: palette
-
-                visible: root.controlEditMode
-                anchors.right: parent.right
-                anchors.top: editBar.bottom
-                anchors.topMargin: 8
-                anchors.bottom: parent.bottom
-                width: root.controlEditMode ? 150 : 0
-                radius: 20
-                color: root.controlDropOnPalette ? "#171824" : "#0d0e14"
-                border.color: root.controlDropOnPalette ? "#8e8eff" : "#282933"
-                border.width: root.controlDropOnPalette ? 2 : 1
-                clip: true
-
-                Behavior on color {
-                    ColorAnimation { duration: 120 }
-                }
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 8
-
-                    QQC2.Label {
-                        Layout.fillWidth: true
-                        text: "Modules"
-                        color: "#f8f8fb"
-                        font.pixelSize: 12
-                        font.weight: Font.Bold
-                    }
-
-                    QQC2.Label {
-                        Layout.fillWidth: true
-                        text: "Drag into the grid. Drop a tile here to hide it."
-                        color: "#8f9099"
-                        font.pixelSize: 9
-                        wrapMode: Text.WordWrap
-                    }
-
-                    Flickable {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        interactive: !root.controlDragActive && !root.controlResizeActive
-                        contentWidth: width
-                        contentHeight: paletteColumn.implicitHeight
-
-                        ColumnLayout {
-                            id: paletteColumn
-
-                            width: parent.width
-                            spacing: 6
-
-                            Repeater {
-                                model: root.controlModules
-
-                                PaletteModule {
-                                    Layout.fillWidth: true
-                                    moduleId: modelData.id
-                                    title: modelData.name
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
+        ControlCenterEditor {
+            app: root
+            hostItem: dialogHost
+            moduleCardDelegate: controlModuleCardDelegate
         }
-
-    }
-
-    component ModuleCard: Rectangle {
-        id: moduleCard
-
-        property string moduleId: ""
-        property int moduleIndex: -1
-        property int moduleWidthUnits: 1
-        property int moduleHeightUnits: 1
-        property real gridUnitSize: 64
-        property real gridGap: 8
-        property bool fromPalette: false
-        radius: 18
-        color: "#101116"
-        border.color: root.controlEditMode ? "#4b4c58" : "#202129"
-        border.width: 1
-        clip: true
-        opacity: root.controlDragActive && root.controlDragSource === moduleCard ? 0 : 1
-        z: 2
-        scale: 1
-
-        Behavior on scale {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on opacity {
-            NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on x {
-            enabled: root.controlEditMode
-            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on y {
-            enabled: root.controlEditMode
-            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on width {
-            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on height {
-            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
-        }
-
-        Loader {
-            anchors.fill: parent
-            anchors.margins: root.controlEditMode ? Math.min(8, Math.max(4, Math.min(moduleCard.width, moduleCard.height) * 0.1)) : 0
-            sourceComponent: {
-                if (moduleCard.moduleId === "userPower")
-                    return userPowerModule;
-                if (moduleCard.moduleId === "volume")
-                    return volumeModule;
-                if (moduleCard.moduleId === "brightness")
-                    return brightnessModule;
-                if (moduleCard.moduleId === "wifi")
-                    return wifiModule;
-                if (moduleCard.moduleId === "wifiDevices")
-                    return wifiDevicesModule;
-                if (moduleCard.moduleId === "bluetooth")
-                    return bluetoothModule;
-                if (moduleCard.moduleId === "bluetoothDiscovery")
-                    return bluetoothDiscoveryModule;
-                if (moduleCard.moduleId === "notifications")
-                    return notificationsModule;
-                if (moduleCard.moduleId === "batteryStatus")
-                    return batteryStatusModule;
-                if (moduleCard.moduleId === "batteryPercent")
-                    return batteryPercentModule;
-                if (moduleCard.moduleId === "powerMode")
-                    return powerModeModule;
-                if (moduleCard.moduleId === "appearanceMode")
-                    return appearanceModeModule;
-                if (moduleCard.moduleId === "theme")
-                    return themeModule;
-                if (moduleCard.moduleId === "media")
-                    return mediaModule;
-                if (moduleCard.moduleId === "kdeConnect")
-                    return kdeConnectModule;
-                if (moduleCard.moduleId === "settings")
-                    return settingsModule;
-                return emptyModule;
-            }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            visible: root.controlEditMode
-            color: "transparent"
-            border.color: "#7a7b88"
-            border.width: 1
-            radius: parent.radius
-        }
-
-        MouseArea {
-            id: dragArea
-
-            visible: root.controlEditMode
-            anchors.fill: parent
-            anchors.margins: 2
-            hoverEnabled: true
-            drag.threshold: 8
-            acceptedButtons: Qt.LeftButton
-            preventStealing: true
-            onPressed: (mouse) => {
-                mouse.accepted = true;
-                const local = dragArea.mapToItem(moduleCard, mouse.x, mouse.y);
-                const pitch = Math.max(1, moduleCard.gridUnitSize + moduleCard.gridGap);
-                root.controlDragOffsetCol = Math.max(0, Math.min(moduleCard.moduleWidthUnits - 1, Math.floor(local.x / pitch)));
-                root.controlDragOffsetRow = Math.max(0, Math.min(moduleCard.moduleHeightUnits - 1, Math.floor(local.y / pitch)));
-                root.beginControlDrag(moduleCard, dragArea, mouse, 54);
-            }
-            onPositionChanged: (mouse) => {
-                mouse.accepted = true;
-                root.updateControlDrag(dragArea, mouse);
-            }
-            onReleased: (mouse) => {
-                mouse.accepted = true;
-                root.endControlDrag(dragArea, mouse, true);
-            }
-            onCanceled: root.endControlDrag(null, null, false)
-        }
-
-        Rectangle {
-            visible: root.controlEditMode
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: 7
-            radius: 9
-            color: "#1b1c24"
-            border.color: "#42434d"
-            border.width: 1
-            width: moduleLabel.implicitWidth + 16
-            height: 22
-
-            QQC2.Label {
-                id: moduleLabel
-
-                anchors.centerIn: parent
-                text: root.moduleInfo(moduleCard.moduleId).name
-                color: "#d8d8e2"
-                font.pixelSize: 9
-                font.weight: Font.Bold
-            }
-        }
-
-        MouseArea {
-            id: resizeHandle
-
-            property real startPointerX: 0
-            property real startPointerY: 0
-            property int startW: 1
-            property int startH: 1
-
-            visible: root.controlEditMode
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            width: Math.min(34, Math.max(24, Math.min(moduleCard.width, moduleCard.height) * 0.55))
-            height: width
-            hoverEnabled: true
-            cursorShape: Qt.SizeFDiagCursor
-            preventStealing: true
-            onPressed: (mouse) => {
-                mouse.accepted = true;
-                const p = resizeHandle.mapToItem(dialogHost, mouse.x, mouse.y);
-                startPointerX = p.x;
-                startPointerY = p.y;
-                startW = moduleCard.moduleWidthUnits;
-                startH = moduleCard.moduleHeightUnits;
-                root.beginControlResize(moduleCard);
-            }
-            onPositionChanged: (mouse) => {
-                if (!pressed || !root.controlResizeActive)
-                    return ;
-
-                mouse.accepted = true;
-                const p = resizeHandle.mapToItem(dialogHost, mouse.x, mouse.y);
-                const step = Math.max(1, moduleCard.gridUnitSize + moduleCard.gridGap);
-                const newW = startW + Math.round((p.x - startPointerX) / step);
-                const newH = startH + Math.round((p.y - startPointerY) / step);
-                root.updateControlResize(moduleCard, newW, newH);
-            }
-            onReleased: (mouse) => {
-                mouse.accepted = true;
-                root.endControlResize(moduleCard, true);
-            }
-            onCanceled: root.endControlResize(moduleCard, false)
-
-            Canvas {
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                width: 24
-                height: 24
-                opacity: resizeHandle.containsMouse ? 1 : 0.62
-
-                onPaint: {
-                    const ctx = getContext("2d");
-                    ctx.reset();
-                    ctx.strokeStyle = "#8e8eff";
-                    ctx.lineWidth = 2;
-                    for (let i = 0; i < 3; ++i) {
-                        ctx.beginPath();
-                        ctx.moveTo(width - 5 - i * 6, height - 2);
-                        ctx.lineTo(width - 2, height - 5 - i * 6);
-                        ctx.stroke();
-                    }
-                }
-            }
-        }
-
-        Component {
-            id: userPowerModule
-
-            Item {
-                id: userPowerContent
-
-                anchors.fill: parent
-                readonly property bool narrow: width < 82
-                readonly property bool compact: width < 150 || height < 74
-                readonly property bool shortTile: height < 62
-                readonly property bool micro: narrow || width < 108
-                readonly property real pad: compact ? 7 : 10
-                readonly property real avatarSize: Math.max(18, Math.min(compact ? 34 : 38, height - pad * 2, narrow ? width - pad * 2 : width * 0.36))
-                readonly property real buttonSize: Math.max(22, Math.min(compact ? 30 : 34, width - pad * 2, height - pad * 2))
-
-                Rectangle {
-                    id: profileAvatarFrame
-
-                    width: userPowerContent.avatarSize
-                    height: width
-                    x: userPowerContent.narrow ? Math.round((parent.width - width) / 2) : userPowerContent.pad
-                    y: userPowerContent.narrow && !userPowerContent.shortTile ? userPowerContent.pad : Math.round((parent.height - height) / 2)
-                    radius: width / 2
-                    color: "#24252e"
-                    clip: true
-
-                    Image {
-                        id: profileAvatarImage
-
-                        anchors.fill: parent
-                        source: root.profileFaceUrl()
-                        fillMode: Image.PreserveAspectCrop
-                        visible: root.profileFaceUrl().length > 0 && status === Image.Ready
-                        layer.enabled: visible
-
-                        layer.effect: MultiEffect {
-                            maskEnabled: true
-                            maskSpreadAtMax: 1
-                            maskSpreadAtMin: 1
-                            maskThresholdMin: 0.5
-
-                            maskSource: ShaderEffectSource {
-                                sourceItem: Rectangle {
-                                    width: profileAvatarImage.width
-                                    height: profileAvatarImage.height
-                                    radius: Math.min(width, height) / 2
-                                    color: "#ffffff"
-                                }
-                            }
-                        }
-                    }
-
-                    Kirigami.Icon {
-                        anchors.centerIn: parent
-                        width: 22
-                        height: 22
-                        source: "user-identity"
-                        color: "#f8f8fb"
-                        visible: !profileAvatarImage.visible
-                    }
-                }
-
-                Column {
-                    id: profileTextColumn
-
-                    visible: !userPowerContent.micro || userPowerContent.shortTile && userPowerContent.width >= 92
-                    x: userPowerContent.shortTile ? profileAvatarFrame.x + profileAvatarFrame.width + 8 : userPowerContent.compact ? userPowerContent.pad : profileAvatarFrame.x + profileAvatarFrame.width + 10
-                    y: userPowerContent.shortTile ? Math.round((parent.height - height) / 2) : userPowerContent.compact ? profileAvatarFrame.y + profileAvatarFrame.height + 6 : Math.round((parent.height - height) / 2)
-                    width: userPowerContent.shortTile ? Math.max(1, (powerButton.visible ? powerButton.x - x - 8 : parent.width - x - userPowerContent.pad)) : userPowerContent.compact ? Math.max(1, parent.width - userPowerContent.pad * 2) : Math.max(1, powerButton.x - x - 10)
-                    spacing: userPowerContent.shortTile ? -1 : 1
-
-                    QQC2.Label {
-                        width: parent.width
-                        text: root.systemUsername || "User"
-                        color: "#f8f8fb"
-                        font.pixelSize: userPowerContent.shortTile ? 10 : userPowerContent.compact ? 11 : 13
-                        font.weight: Font.Bold
-                        elide: Text.ElideRight
-                        maximumLineCount: 1
-                    }
-
-                    QQC2.Label {
-                        visible: !userPowerContent.compact || userPowerContent.height >= 34
-                        width: parent.width
-                        text: root.systemHostname || "KDE Plasma"
-                        color: "#8f9099"
-                        font.pixelSize: userPowerContent.shortTile ? 8 : userPowerContent.compact ? 9 : 10
-                        elide: Text.ElideRight
-                        maximumLineCount: 1
-                    }
-                }
-
-                IslandButton {
-                    id: powerButton
-
-                    x: userPowerContent.narrow ? Math.round((parent.width - width) / 2) : parent.width - width - userPowerContent.pad
-                    y: userPowerContent.narrow ? parent.height - height - userPowerContent.pad : userPowerContent.compact ? userPowerContent.pad : Math.round((parent.height - height) / 2)
-                    width: userPowerContent.buttonSize
-                    height: width
-                    visible: !userPowerContent.shortTile && (!userPowerContent.narrow || parent.height >= profileAvatarFrame.height + height + userPowerContent.pad * 3)
-                    iconName: "system-shutdown"
-                    compact: true
-                    onClicked: powerMenu.open()
-
-                    QQC2.Menu {
-                        id: powerMenu
-
-                        QQC2.MenuItem { text: "Lock"; onTriggered: root.runPowerAction("lock") }
-                        QQC2.MenuItem { text: "Logout"; onTriggered: root.runPowerAction("logout") }
-                        QQC2.MenuItem { text: "Sleep"; onTriggered: root.runPowerAction("sleep") }
-                        QQC2.MenuItem { text: "Hibernate"; onTriggered: root.runPowerAction("hibernate") }
-                        QQC2.MenuSeparator {}
-                        QQC2.MenuItem { text: "Reboot"; onTriggered: root.runPowerAction("reboot") }
-                        QQC2.MenuItem { text: "Shutdown"; onTriggered: root.runPowerAction("shutdown") }
-                    }
-                }
-
-                Row {
-                    visible: !userPowerContent.compact && userPowerContent.width >= 210 && userPowerContent.height >= 116
-                    x: profileTextColumn.x
-                    y: parent.height - height - userPowerContent.pad
-                    spacing: 7
-
-                    IslandButton {
-                        width: 28
-                        height: 28
-                        iconName: "system-lock-screen"
-                        compact: true
-                        onClicked: root.runPowerAction("lock")
-                    }
-
-                    IslandButton {
-                        width: 28
-                        height: 28
-                        iconName: "system-suspend"
-                        compact: true
-                        onClicked: root.runPowerAction("sleep")
-                    }
-
-                    IslandButton {
-                        width: 28
-                        height: 28
-                        iconName: "preferences-desktop-theme-global"
-                        compact: true
-                        onClicked: root.launchAppearanceSettings()
-                    }
-
-                    IslandButton {
-                        width: 28
-                        height: 28
-                        iconName: "systemsettings"
-                        compact: true
-                        onClicked: root.launchSystemSettings()
-                    }
-                }
-            }
-        }
-
-        Component {
-            id: volumeModule
-
-            ControlSlider {
-                anchors.fill: parent
-                anchors.margins: 0
-                title: "Volume"
-                iconName: {
-                    const sink = root.defaultSink();
-                    return sink && sink.muted ? "audio-volume-muted" : "audio-volume-high";
-                }
-                valueText: {
-                    const sink = root.defaultSink();
-                    return sink && sink.muted ? "Muted" : root.systemVolumePercent() + "%";
-                }
-                value: Math.min(100, root.systemVolumePercent())
-                toValue: 100
-                accent: "#5ac8fa"
-                enabled: root.defaultSink() !== null
-                actionIconName: {
-                    const sink = root.defaultSink();
-                    return sink && sink.muted ? "audio-volume-high" : "audio-volume-muted";
-                }
-                secondaryActionIconName: "settings"
-                onActionTriggered: root.toggleSystemMute()
-                onSecondaryActionTriggered: root.launchPavucontrol()
-                onMoved: (value) => root.setSystemVolumePercent(value)
-            }
-        }
-
-        Component {
-            id: brightnessModule
-
-            ControlSlider {
-                anchors.fill: parent
-                title: "Brightness"
-                iconName: "brightness-high"
-                valueText: screenBrightness.isBrightnessAvailable ? root.displayedScreenBrightnessPercent() + "%" : "--"
-                value: root.displayedScreenBrightnessPercent()
-                accent: "#f5d64a"
-                enabled: screenBrightness.isBrightnessAvailable
-                actionIconName: "video-display"
-                secondaryActionIconName: keyboardBrightness.isBrightnessAvailable ? "input-keyboard" : ""
-                onActionTriggered: root.launchDisplaySettings()
-                onSecondaryActionTriggered: root.setKeyboardBrightnessPercent(root.keyboardBrightnessPercent() <= 20 ? 100 : 0)
-                onMoved: (value) => root.setScreenBrightnessPercent(value)
-            }
-        }
-
-        Component {
-            id: wifiModule
-
-            SimpleModuleTile {
-                iconName: enabledConnections.wirelessEnabled ? "network-wireless-on" : "network-wireless-off"
-                title: "Wi-Fi"
-                subtitle: root.wifiPrimaryNetwork()
-                active: enabledConnections.wirelessEnabled
-                accent: "#0a84ff"
-                progress: root.wifiSignalPercent()
-                detailText: root.wifiTitle()
-                footerText: enabledConnections.wirelessHwEnabled ? "Click to toggle" : "No adapter"
-                actionIconName: "settings"
-                onActionTriggered: root.launchNetworkSettings()
-                onTriggered: root.toggleWifi()
-            }
-        }
-
-        Component {
-            id: wifiDevicesModule
-
-            NetworkListModule {}
-        }
-
-        Component {
-            id: mediaModule
-
-            ActivitySummary {
-                anchors.fill: parent
-                mediaOnly: true
-                radius: moduleCard.radius
-                border.width: 0
-            }
-        }
-
-        Component {
-            id: notificationsModule
-
-            Item {
-                id: notificationsContent
-
-                anchors.fill: parent
-                readonly property int notificationTotal: root.notificationCount()
-                readonly property bool iconOnly: width < 100 || height < 62
-                readonly property bool compact: width < 165 || height < 115
-
-                ColumnLayout {
-                    visible: !notificationsContent.iconOnly
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 6
-
-                    RowLayout {
-                        Layout.fillWidth: true
-
-                        Kirigami.Icon {
-                            Layout.preferredWidth: 18
-                            Layout.preferredHeight: 18
-                            source: notificationsContent.notificationTotal > 0 ? "notifications" : "notifications-disabled"
-                            color: notificationsContent.notificationTotal > 0 ? "#ff9f0a" : "#8f9099"
-                        }
-
-                        QQC2.Label {
-                            Layout.fillWidth: true
-                            text: notificationsContent.notificationTotal > 0 ? notificationsContent.notificationTotal + " notifications" : "Notifications"
-                            color: "#f8f8fb"
-                            font.pixelSize: 12
-                            font.weight: Font.Bold
-                            elide: Text.ElideRight
-                        }
-
-                        IslandButton {
-                            visible: !notificationsContent.compact
-                            iconName: "edit-clear-all"
-                            compact: true
-                            enabled: notificationsContent.notificationTotal > 0
-                            onClicked: root.clearNotifications()
-                        }
-
-                        IslandButton {
-                            visible: !notificationsContent.compact
-                            iconName: "settings"
-                            compact: true
-                            onClicked: root.launchNotificationSettings()
-                        }
-                    }
-
-                    Repeater {
-                        model: root.notificationRows(notificationsContent.compact ? 2 : 4)
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-
-                            Rectangle {
-                                Layout.preferredWidth: 5
-                                Layout.preferredHeight: 5
-                                radius: 3
-                                color: "#ff9f0a"
-                            }
-
-                            QQC2.Label {
-                                Layout.fillWidth: true
-                                text: root.cleanText(root.rowValue(modelData, NotificationManager.Notifications.SummaryRole, "Notification"))
-                                color: "#c9c9d2"
-                                font.pixelSize: 10
-                                elide: Text.ElideRight
-                            }
-
-                            IslandButton {
-                                visible: !notificationsContent.compact
-                                iconName: "window-close"
-                                compact: true
-                                enabled: root.rowValue(modelData, NotificationManager.Notifications.ClosableRole, true)
-                                onClicked: notifications.close(notifications.index(modelData, 0))
-                            }
-                        }
-                    }
-
-                    QQC2.Label {
-                        visible: notificationsContent.notificationTotal <= 0
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        text: "Quiet"
-                        color: "#777884"
-                        font.pixelSize: 10
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
-
-                Kirigami.Icon {
-                    visible: notificationsContent.iconOnly
-                    anchors.centerIn: parent
-                    width: Math.max(20, Math.min(34, parent.width - 14, parent.height - 14))
-                    height: width
-                    source: notificationsContent.notificationTotal > 0 ? "notifications" : "notifications-disabled"
-                    color: notificationsContent.notificationTotal > 0 ? "#ff9f0a" : "#8f9099"
-                }
-
-                Rectangle {
-                    visible: notificationsContent.iconOnly && notificationsContent.notificationTotal > 0
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 7
-                    width: Math.max(16, countLabel.implicitWidth + 8)
-                    height: 16
-                    radius: 8
-                    color: "#ff453a"
-
-                    QQC2.Label {
-                        id: countLabel
-
-                        anchors.centerIn: parent
-                        text: notificationsContent.notificationTotal
-                        color: "#ffffff"
-                        font.pixelSize: 9
-                        font.weight: Font.Bold
-                    }
-                }
-            }
-        }
-
-        Component {
-            id: bluetoothModule
-
-            SimpleModuleTile {
-                iconName: "preferences-system-bluetooth"
-                title: "Bluetooth"
-                subtitle: root.bluetoothPowered ? root.bluetoothDevicesText.length > 0 ? root.bluetoothDevicesText.split("\n")[0] : "On" : "Off"
-                active: root.bluetoothPowered
-                accent: "#0a84ff"
-                detailText: root.bluetoothPowered ? root.bluetoothDevicesText.length > 0 ? root.bluetoothDevicesText : "No connected devices" : "Radio disabled"
-                footerText: "Click to toggle"
-                actionIconName: "settings"
-                onActionTriggered: root.launchBluetoothSettings()
-                onTriggered: root.toggleBluetoothPower()
-            }
-        }
-
-        Component {
-            id: bluetoothDiscoveryModule
-
-            SimpleModuleTile {
-                iconName: "preferences-system-bluetooth"
-                title: "Discover"
-                subtitle: root.bluetoothPowered ? root.bluetoothDevicesText.length > 0 ? root.bluetoothDevicesText.split("\n")[0] : "Devices" : "Turn on first"
-                active: true
-                accent: "#5ac8fa"
-                detailText: root.bluetoothPowered ? root.bluetoothDevicesText.length > 0 ? root.bluetoothDevicesText : "Pair, trust and connect" : "Bluetooth is off"
-                footerText: "Open Bluetooth"
-                onTriggered: root.launchBluetoothDiscovery()
-            }
-        }
-
-        Component {
-            id: batteryStatusModule
-
-            SimpleModuleTile {
-                iconName: batteryControl.pluggedIn ? "battery-charging" : "battery"
-                title: "Battery"
-                subtitle: batteryControl.pluggedIn ? "Charging" : "On battery"
-                active: batteryControl.pluggedIn
-                accent: "#34c759"
-                progress: batteryControl.hasInternalBatteries ? batteryControl.percent : 100
-                detailText: root.batteryText()
-                footerText: batteryControl.hasInternalBatteries ? (batteryControl.pluggedIn ? "Plugged in" : "Discharging") : "Desktop power"
-                actionIconName: "settings"
-                onActionTriggered: root.launchPowerSettings()
-            }
-        }
-
-        Component {
-            id: batteryPercentModule
-
-            SimpleModuleTile {
-                iconName: batteryControl.pluggedIn ? "battery-charging" : "battery"
-                title: root.batteryText()
-                subtitle: "Battery"
-                active: batteryControl.pluggedIn
-                accent: "#34c759"
-                progress: batteryControl.hasInternalBatteries ? batteryControl.percent : 100
-                detailText: batteryControl.pluggedIn ? "Charging" : "Power"
-                actionIconName: "settings"
-                onActionTriggered: root.launchPowerSettings()
-            }
-        }
-
-        Component {
-            id: powerModeModule
-
-            SimpleModuleTile {
-                iconName: root.powerProfileIcon()
-                title: root.powerProfileTitle()
-                subtitle: "Power mode"
-                active: true
-                accent: "#ffd60a"
-                detailText: powerProfiles.profiles && powerProfiles.profiles.length > 1 ? "Click to cycle" : "Current profile"
-                footerText: powerProfiles.activeProfile
-                actionIconName: "settings"
-                onActionTriggered: root.launchPowerSettings()
-                onTriggered: root.cyclePowerProfile()
-            }
-        }
-
-        Component {
-            id: appearanceModeModule
-
-            SimpleModuleTile {
-                iconName: "preferences-desktop-theme"
-                title: Brightness.DarkModeControl.darkMode ? "Dark" : "Light"
-                subtitle: "Appearance"
-                active: Brightness.DarkModeControl.darkMode
-                accent: "#bf5af2"
-                detailText: "Desktop color scheme"
-                footerText: "Click to switch"
-                onTriggered: root.toggleAppearanceMode()
-            }
-        }
-
-        Component {
-            id: themeModule
-
-            SimpleModuleTile {
-                iconName: "preferences-desktop-theme-global"
-                title: "Theme"
-                subtitle: "Global themes"
-                active: true
-                accent: "#bf5af2"
-                detailText: "Open KDE themes"
-                onTriggered: root.launchAppearanceSettings()
-            }
-        }
-
-        Component {
-            id: kdeConnectModule
-
-            SimpleModuleTile {
-                iconName: "kdeconnect"
-                title: "KDE Connect"
-                subtitle: "Devices"
-                active: true
-                accent: "#5ac8fa"
-                detailText: "Phones and paired devices"
-                onTriggered: root.launchKdeConnectSettings()
-            }
-        }
-
-        Component {
-            id: settingsModule
-
-            SimpleModuleTile {
-                iconName: "systemsettings"
-                title: "Settings"
-                subtitle: "System"
-                active: true
-                accent: "#8e8eff"
-                detailText: "Open System Settings"
-                onTriggered: root.launchSystemSettings()
-            }
-        }
-
-        Component {
-            id: emptyModule
-
-            SimpleModuleTile {
-                iconName: "unknown"
-                title: moduleCard.moduleId
-                subtitle: "Unknown"
-                active: false
-            }
-        }
-    }
-
-    component NetworkListModule: MouseArea {
-        id: networkList
-
-        readonly property bool compact: width < 150 || height < 86
-        readonly property bool iconOnly: width < 96 || height < 58
-        readonly property var rows: root.wifiRows(compact ? 2 : 4)
-
-        anchors.fill: parent
-        hoverEnabled: true
-        enabled: !root.controlEditMode
-        onClicked: root.launchNetworkSettings()
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Math.min(18, Math.min(width, height) / 2)
-            color: networkList.pressed ? "#242630" : networkList.containsMouse ? "#1a1b24" : "#15161d"
-            border.color: enabledConnections.wirelessEnabled ? "#29485f" : "#2a2b35"
-            border.width: 1
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: Math.max(3, parent.height * root.wifiSignalPercent() / 100)
-                radius: parent.radius
-                color: "#5ac8fa"
-                opacity: enabledConnections.wirelessEnabled ? 0.18 : 0
-            }
-        }
-
-        ColumnLayout {
-            visible: !networkList.iconOnly
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 5
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 7
-
-                Kirigami.Icon {
-                    Layout.preferredWidth: 18
-                    Layout.preferredHeight: 18
-                    source: enabledConnections.wirelessEnabled ? "network-wireless-on" : "network-wireless-off"
-                    color: enabledConnections.wirelessEnabled ? "#5ac8fa" : "#8f9099"
-                }
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    text: enabledConnections.wirelessEnabled ? "Networks" : "Wi-Fi Off"
-                    color: "#f8f8fb"
-                    font.pixelSize: 11
-                    font.weight: Font.Bold
-                    elide: Text.ElideRight
-                }
-
-                QQC2.Label {
-                    visible: networkList.width >= 156
-                    text: root.wifiSignalPercent() > 0 ? root.wifiSignalPercent() + "%" : ""
-                    color: "#8f9099"
-                    font.pixelSize: 10
-                    font.weight: Font.Bold
-                }
-
-                IslandButton {
-                    visible: !networkList.compact
-                    Layout.preferredWidth: 24
-                    Layout.preferredHeight: 24
-                    iconName: "reset"
-                    compact: true
-                    onClicked: wifiRefreshTimer.restart()
-                }
-
-                IslandButton {
-                    visible: !networkList.compact
-                    Layout.preferredWidth: 24
-                    Layout.preferredHeight: 24
-                    iconName: "settings"
-                    compact: true
-                    onClicked: root.launchNetworkSettings()
-                }
-            }
-
-            Repeater {
-                model: networkList.rows.length > 0 ? networkList.rows : [enabledConnections.wirelessEnabled ? "No visible networks" : "Click to manage"]
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    text: modelData
-                    color: String(modelData).indexOf("• ") === 0 ? "#f8f8fb" : "#9b9ca6"
-                    font.pixelSize: 10
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-            }
-        }
-
-        Kirigami.Icon {
-            visible: networkList.iconOnly
-            anchors.centerIn: parent
-            width: Math.max(20, Math.min(36, parent.width - 14, parent.height - 14))
-            height: width
-            source: enabledConnections.wirelessEnabled ? "network-wireless-on" : "network-wireless-off"
-            color: enabledConnections.wirelessEnabled ? "#5ac8fa" : "#8f9099"
-        }
-
-        QQC2.ToolTip.visible: networkList.containsMouse
-        QQC2.ToolTip.text: root.networkSummary()
-        QQC2.ToolTip.delay: 350
-    }
-
-    component PaletteModule: Rectangle {
-        id: paletteModule
-
-        property string moduleId: ""
-        property string title: ""
-        property bool fromPalette: true
-
-        implicitHeight: 42
-        radius: 13
-        color: paletteDrag.pressed ? "#2b2c35" : root.controlDropOnPalette ? "#25263a" : "#171820"
-        border.color: root.controlDropOnPalette ? "#8e8eff" : "#2a2b35"
-        border.width: 1
-        opacity: root.controlDragActive && root.controlDragSource === paletteModule ? 0.48 : 1
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 9
-            anchors.rightMargin: 9
-            spacing: 7
-
-            Kirigami.Icon {
-                Layout.preferredWidth: 18
-                Layout.preferredHeight: 18
-                source: root.moduleIcon(paletteModule.moduleId)
-                color: "#f1f1f6"
-            }
-
-            QQC2.Label {
-                Layout.fillWidth: true
-                text: paletteModule.title
-                color: "#f1f1f6"
-                font.pixelSize: 10
-                font.weight: Font.Bold
-                elide: Text.ElideRight
-            }
-        }
-
-        MouseArea {
-            id: paletteDrag
-
-            property real pressX: 0
-            property real pressY: 0
-            property bool movedEnough: false
-
-            anchors.fill: parent
-            hoverEnabled: true
-            drag.threshold: 8
-            preventStealing: true
-            onClicked: {
-                if (!movedEnough)
-                    root.addControlModule(paletteModule.moduleId);
-
-            }
-            onPressed: (mouse) => {
-                mouse.accepted = true;
-                pressX = mouse.x;
-                pressY = mouse.y;
-                movedEnough = false;
-                root.controlDragOffsetCol = 0;
-                root.controlDragOffsetRow = 0;
-                root.beginControlDrag(paletteModule, paletteDrag, mouse, 48);
-            }
-            onPositionChanged: (mouse) => {
-                if (Math.abs(mouse.x - pressX) > 8 || Math.abs(mouse.y - pressY) > 8)
-                    movedEnough = true;
-
-                mouse.accepted = true;
-                root.updateControlDrag(paletteDrag, mouse);
-            }
-            onReleased: (mouse) => {
-                mouse.accepted = true;
-                root.endControlDrag(paletteDrag, mouse, movedEnough);
-            }
-            onCanceled: root.endControlDrag(null, null, false)
-        }
-
-    }
-
-    component SimpleModuleTile: MouseArea {
-        id: simpleTile
-
-        property string iconName: ""
-        property string title: ""
-        property string subtitle: ""
-        property bool active: false
-        property color accent: "#5ac8fa"
-        property real progress: -1
-        property string detailText: ""
-        property string footerText: ""
-        property string actionIconName: ""
-        readonly property bool iconOnly: width < 92 || height < 54
-        readonly property bool detailed: !iconOnly && width >= 142 && height >= 88
-        readonly property bool hasAction: actionIconName.length > 0
-        readonly property real contentMargin: iconOnly ? 6 : 8
-        readonly property real safeProgress: root.clampNumber(progress, 0, 100)
-
-        signal triggered()
-        signal actionTriggered()
-
-        anchors.fill: parent
-        hoverEnabled: true
-        enabled: !root.controlEditMode
-        onClicked: simpleTile.triggered()
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Math.min(18, Math.min(width, height) / 2)
-            color: simpleTile.pressed ? "#242630" : simpleTile.containsMouse ? "#1a1b24" : simpleTile.active ? "#171821" : "#15161d"
-            border.color: simpleTile.active ? Qt.rgba(simpleTile.accent.r, simpleTile.accent.g, simpleTile.accent.b, 0.5) : "#2a2b35"
-            border.width: 1
-        }
-
-        Rectangle {
-            visible: simpleTile.progress >= 0
-            anchors.left: parent.left
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: parent.height * simpleTile.safeProgress / 100
-            radius: Math.min(18, Math.min(parent.width, parent.height) / 2)
-            color: simpleTile.accent
-            opacity: 0.18
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.margins: simpleTile.contentMargin
-            anchors.rightMargin: simpleTile.detailed && simpleTile.hasAction ? 40 : simpleTile.contentMargin
-            spacing: simpleTile.iconOnly ? 0 : 8
-
-            Kirigami.Icon {
-                Layout.alignment: Qt.AlignCenter
-                Layout.preferredWidth: Math.max(18, Math.min(simpleTile.detailed ? 30 : 34, simpleTile.width - simpleTile.contentMargin * 2, simpleTile.height - simpleTile.contentMargin * 2))
-                Layout.preferredHeight: Layout.preferredWidth
-                source: simpleTile.iconName
-                color: simpleTile.active ? simpleTile.accent : "#9c9da8"
-            }
-
-            ColumnLayout {
-                visible: !simpleTile.iconOnly
-                Layout.fillWidth: true
-                spacing: simpleTile.detailed ? 4 : 1
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    text: simpleTile.title
-                    color: "#f8f8fb"
-                    font.pixelSize: 11
-                    font.weight: Font.Bold
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-
-                QQC2.Label {
-                    Layout.fillWidth: true
-                    text: simpleTile.subtitle
-                    color: "#8f9099"
-                    font.pixelSize: 9
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-
-                QQC2.Label {
-                    visible: simpleTile.detailed && simpleTile.detailText.length > 0
-                    Layout.fillWidth: true
-                    text: simpleTile.detailText
-                    color: "#c9c9d2"
-                    font.pixelSize: 10
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-
-                Rectangle {
-                    visible: simpleTile.detailed && simpleTile.progress >= 0
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 4
-                    radius: 2
-                    color: "#2a2b35"
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: parent.width * simpleTile.safeProgress / 100
-                        radius: parent.radius
-                        color: simpleTile.accent
-                    }
-                }
-
-                QQC2.Label {
-                    visible: simpleTile.detailed && simpleTile.footerText.length > 0
-                    Layout.fillWidth: true
-                    text: simpleTile.footerText
-                    color: "#777884"
-                    font.pixelSize: 9
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-            }
-        }
-
-        IslandButton {
-            visible: simpleTile.detailed && simpleTile.hasAction
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: 8
-            width: 26
-            height: 26
-            compact: true
-            iconName: simpleTile.actionIconName
-            onClicked: simpleTile.actionTriggered()
-        }
-
-        QQC2.ToolTip.visible: simpleTile.containsMouse && (simpleTile.detailText.length > 0 || simpleTile.footerText.length > 0)
-        QQC2.ToolTip.text: simpleTile.title + (simpleTile.subtitle.length > 0 ? " · " + simpleTile.subtitle : "") + (simpleTile.detailText.length > 0 ? "\n" + simpleTile.detailText : "")
-        QQC2.ToolTip.delay: 350
-    }
-
-    component ActivitySummary: Rectangle {
-        id: activitySummary
-
-        property bool mediaOnly: false
-        readonly property bool showMedia: root.hasPlayer
-        readonly property bool showAnyActivity: mediaOnly ? showMedia : root.hasActivity
-        readonly property string summaryMode: mediaOnly ? root.hasPlayer ? "media" : "idle" : root.activityMode()
-        readonly property color activityColor: mediaOnly ? "#5ac8fa" : root.isPlaying ? "#c026d3" : root.hasNotifications ? "#ff9f0a" : root.hasJobs ? "#34c759" : "#54545f"
-        readonly property bool iconOnly: width < 100 || height < 62
-        readonly property bool compact: width < 190 || height < 112
-        readonly property real artSize: iconOnly ? Math.max(24, Math.min(width, height) - 18) : compact ? Math.max(36, Math.min(52, height - 22)) : Math.max(48, Math.min(64, height - 28))
-
-        radius: 22
-        color: "#101116"
-        border.color: "#202129"
-        border.width: 1
-        clip: true
-
-        RowLayout {
-            visible: !activitySummary.iconOnly
-            anchors.fill: parent
-            anchors.margins: activitySummary.compact ? 10 : 14
-            spacing: activitySummary.compact ? 9 : 13
-
-            MaskedArtwork {
-                Layout.preferredWidth: activitySummary.artSize
-                Layout.preferredHeight: activitySummary.artSize
-                artworkSource: root.hasPlayer ? root.player.artUrl : ""
-                cornerRadius: activitySummary.compact ? 12 : 16
-                glyphSize: activitySummary.compact ? 28 : 36
-                mode: activitySummary.summaryMode
-                progress: Math.max(0, notifications.jobsPercentage) / 100
-                playing: root.isPlaying
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: 6
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
-
-                        QQC2.Label {
-                            Layout.fillWidth: true
-                            text: activitySummary.showAnyActivity ? root.primaryText() : activitySummary.mediaOnly ? "Nothing playing" : "Ready"
-                            color: "#ffffff"
-                            font.pixelSize: activitySummary.compact ? 12 : 15
-                            font.weight: Font.Bold
-                            elide: Text.ElideRight
-                            maximumLineCount: 1
-                        }
-
-                        QQC2.Label {
-                            Layout.fillWidth: true
-                            text: activitySummary.showAnyActivity ? root.secondaryText() : activitySummary.mediaOnly ? "" : "Media, notifications and jobs"
-                            color: "#9b9ba6"
-                            font.pixelSize: activitySummary.compact ? 10 : 11
-                            elide: Text.ElideRight
-                            maximumLineCount: 1
-                        }
-
-                    }
-
-                    IslandBars {
-                        visible: !activitySummary.compact || width >= 260
-                        Layout.preferredWidth: 36
-                        Layout.preferredHeight: 28
-                        color: activitySummary.activityColor
-                        playing: activitySummary.mediaOnly ? root.isPlaying : root.isPlaying || root.hasJobs || root.hasNotifications
-                    }
-
-                }
-
-                ProgressBar {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 6
-                    visible: !activitySummary.compact && ((!activitySummary.mediaOnly && root.hasJobs) || (root.hasPlayer && root.player.length > 0))
-                    from: 0
-                    to: !activitySummary.mediaOnly && root.hasJobs ? 100 : Math.max(1, root.player ? root.player.length : 1)
-                    value: !activitySummary.mediaOnly && root.hasJobs ? Math.max(0, notifications.jobsPercentage) : root.player ? root.player.position : 0
-                    accent: !activitySummary.mediaOnly && root.hasJobs ? "#34c759" : "#5ac8fa"
-                }
-
-                RowLayout {
-                    visible: !activitySummary.compact
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    RowLayout {
-                        visible: root.hasPlayer
-                        spacing: 8
-
-                        IslandButton {
-                            iconName: "media-skip-backward"
-                            compact: true
-                            enabled: root.player && root.player.canGoPrevious
-                            onClicked: root.player.Previous()
-                        }
-
-                        IslandButton {
-                            iconName: root.isPlaying ? "media-playback-pause" : "media-playback-start"
-                            compact: true
-                            emphasized: true
-                            enabled: root.player && (root.player.canPlay || root.player.canPause)
-                            onClicked: root.player.PlayPause()
-                        }
-
-                        IslandButton {
-                            iconName: "media-skip-forward"
-                            compact: true
-                            enabled: root.player && root.player.canGoNext
-                            onClicked: root.player.Next()
-                        }
-
-                    }
-
-                    QQC2.Label {
-                        Layout.fillWidth: true
-                        text: activitySummary.mediaOnly ? root.hasPlayer ? root.player.identity || "Media player" : "" : root.hasJobs ? "Download active" : root.hasNotifications ? notifications.unreadNotificationsCount + " unread" : enabledConnections.networkingEnabled ? "Wired connected" : "Network offline"
-                        color: "#8f9099"
-                        font.pixelSize: 10
-                        horizontalAlignment: Text.AlignRight
-                        elide: Text.ElideRight
-                    }
-
-                }
-
-            }
-
-        }
-
-        MaskedArtwork {
-            visible: activitySummary.iconOnly
-            anchors.centerIn: parent
-            width: activitySummary.artSize
-            height: width
-            artworkSource: root.hasPlayer ? root.player.artUrl : ""
-            cornerRadius: 10
-            glyphSize: width * 0.7
-            mode: activitySummary.summaryMode
-            progress: Math.max(0, notifications.jobsPercentage) / 100
-            playing: root.isPlaying
-        }
-
-        IslandBars {
-            visible: activitySummary.iconOnly && (activitySummary.mediaOnly ? root.isPlaying : root.isPlaying || root.hasJobs || root.hasNotifications) && width >= 58
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            width: 20
-            height: 20
-            spacing: 2
-            color: activitySummary.activityColor
-            playing: true
-        }
-
     }
 
     component IslandBars: Row {
@@ -3845,200 +2511,6 @@ PlasmoidItem {
             progress: maskedArtwork.progress
             playing: maskedArtwork.playing
             visible: !maskedArtwork.hasArtwork
-        }
-
-    }
-
-    component ControlTile: MouseArea {
-        id: tile
-
-        property string iconName: ""
-        property string label: ""
-        property string tooltip: ""
-        property bool active: false
-        property bool interactive: true
-        property color accent: "#5ac8fa"
-
-        implicitWidth: 70
-        implicitHeight: 66
-        hoverEnabled: true
-        enabled: interactive
-        QQC2.ToolTip.visible: tile.containsMouse && tile.tooltip.length > 0
-        QQC2.ToolTip.text: tile.tooltip
-        QQC2.ToolTip.delay: 450
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 14
-            color: tile.pressed ? "#33343d" : tile.containsMouse && tile.interactive ? "#25262e" : tile.active ? "#1d1e27" : "#15161d"
-            border.color: tile.active ? Qt.rgba(tile.accent.r, tile.accent.g, tile.accent.b, 0.52) : "#2a2b35"
-            border.width: 1
-        }
-
-        ColumnLayout {
-            anchors.centerIn: parent
-            width: parent.width - 10
-            spacing: 3
-
-            Kirigami.Icon {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
-                source: tile.iconName
-                color: tile.active ? tile.accent : "#8e8f99"
-            }
-
-            QQC2.Label {
-                Layout.fillWidth: true
-                text: tile.label
-                color: tile.active ? "#f8f8fb" : "#b8b8c1"
-                font.pixelSize: 9
-                font.weight: Font.Bold
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-                maximumLineCount: 1
-            }
-
-        }
-
-    }
-
-    component ControlSlider: Item {
-        id: controlSlider
-
-        property string title: ""
-        property string iconName: ""
-        property string valueText: ""
-        property real value: 0
-        property real toValue: 100
-        property color accent: "#5ac8fa"
-        property string actionIconName: ""
-        property string secondaryActionIconName: ""
-        readonly property real safeToValue: Math.max(1, root.finiteNumber(toValue, 100))
-        readonly property real safeValue: Math.max(0, Math.min(safeToValue, root.finiteNumber(value, 0)))
-        readonly property real ratio: safeValue / safeToValue
-        readonly property real fillRatio: ratio
-        readonly property bool vertical: height > width * 1.25
-        readonly property bool showActions: width >= 142 && height >= 72 && (actionIconName.length > 0 || secondaryActionIconName.length > 0)
-
-        signal moved(real value)
-        signal actionTriggered()
-        signal secondaryActionTriggered()
-
-        implicitHeight: 116
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Math.min(18, Math.min(width, height) / 2)
-            color: "#15161d"
-            border.color: "#2a2b35"
-            border.width: 1
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.bottom: parent.bottom
-                width: controlSlider.vertical ? parent.width : parent.width * controlSlider.fillRatio
-                height: controlSlider.vertical ? parent.height * controlSlider.fillRatio : parent.height
-                radius: parent.radius
-                color: controlSlider.accent
-                opacity: controlSlider.enabled ? (root.controlEditMode ? 0.72 : 0.92) : 0.16
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                color: "transparent"
-                border.color: "#31323d"
-                border.width: 1
-            }
-        }
-
-        Kirigami.Icon {
-            anchors.centerIn: parent
-            width: Math.max(16, Math.min(34, parent.width - 14, parent.height - 14))
-            height: width
-            source: controlSlider.iconName
-            color: "#f8f8fb"
-            opacity: controlSlider.enabled ? 1 : 0.42
-        }
-
-        QQC2.Label {
-            visible: controlSlider.width >= 116 && !controlSlider.showActions
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: 10
-            text: controlSlider.valueText
-            color: "#f8f8fb"
-            font.pixelSize: 11
-            font.weight: Font.Bold
-        }
-
-        QQC2.ToolTip.visible: hoverArea.containsMouse
-        QQC2.ToolTip.text: controlSlider.title + " " + controlSlider.valueText
-        QQC2.ToolTip.delay: 350
-
-        MouseArea {
-            id: hoverArea
-
-            anchors.fill: parent
-            hoverEnabled: true
-            enabled: controlSlider.enabled && !root.controlEditMode
-            preventStealing: true
-
-            function valueFromMouse(mouse) {
-                const pct = controlSlider.vertical ? 1 - mouse.y / Math.max(1, height) : mouse.x / Math.max(1, width);
-                return Math.round(Math.max(0, Math.min(1, pct)) * controlSlider.safeToValue);
-            }
-
-            onPressed: (mouse) => {
-                mouse.accepted = true;
-                controlSlider.moved(valueFromMouse(mouse));
-            }
-            onPositionChanged: (mouse) => {
-                if (pressed) {
-                    mouse.accepted = true;
-                    controlSlider.moved(valueFromMouse(mouse));
-                }
-
-            }
-        }
-
-        Row {
-            visible: controlSlider.showActions
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: 8
-            spacing: 6
-            z: 3
-
-            IslandButton {
-                visible: controlSlider.actionIconName.length > 0
-                width: 26
-                height: 26
-                compact: true
-                iconName: controlSlider.actionIconName
-                onClicked: controlSlider.actionTriggered()
-            }
-
-            IslandButton {
-                visible: controlSlider.secondaryActionIconName.length > 0
-                width: 26
-                height: 26
-                compact: true
-                iconName: controlSlider.secondaryActionIconName
-                onClicked: controlSlider.secondaryActionTriggered()
-            }
-        }
-
-        QQC2.Label {
-            visible: controlSlider.showActions && controlSlider.width >= 180
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: 10
-            text: controlSlider.valueText
-            color: "#f8f8fb"
-            font.pixelSize: 11
-            font.weight: Font.Bold
         }
 
     }

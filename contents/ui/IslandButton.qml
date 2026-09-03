@@ -172,6 +172,62 @@ Item {
                 ctx.stroke();
                 return ;
             }
+            if (control.iconName.indexOf("refresh") !== -1 || control.iconName.indexOf("reload") !== -1) {
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.5, w * 0.3, Math.PI * 0.18, Math.PI * 1.65);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w * 0.26, h * 0.52);
+                ctx.lineTo(w * 0.16, h * 0.68);
+                ctx.lineTo(w * 0.34, h * 0.7);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.5, w * 0.3, Math.PI * 1.18, Math.PI * 2.65);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w * 0.74, h * 0.48);
+                ctx.lineTo(w * 0.84, h * 0.32);
+                ctx.lineTo(w * 0.66, h * 0.3);
+                ctx.fill();
+                return ;
+            }
+            if (control.iconName.indexOf("information") !== -1 || control.iconName.indexOf("ping") !== -1) {
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.5, w * 0.32, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.34, w * 0.04, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(w * 0.5, h * 0.48);
+                ctx.lineTo(w * 0.5, h * 0.68);
+                ctx.stroke();
+                return ;
+            }
+            if (control.iconName.indexOf("notification") !== -1 || control.iconName.indexOf("bell") !== -1) {
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.46, w * 0.22, Math.PI, 0);
+                ctx.lineTo(w * 0.72, h * 0.62);
+                ctx.lineTo(w * 0.28, h * 0.62);
+                ctx.closePath();
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(w * 0.5, h * 0.72, w * 0.05, 0, Math.PI * 2);
+                ctx.fill();
+                return ;
+            }
+            if (control.iconName.indexOf("folder") !== -1 || control.iconName.indexOf("mount") !== -1) {
+                ctx.beginPath();
+                ctx.moveTo(w * 0.18, h * 0.34);
+                ctx.lineTo(w * 0.4, h * 0.34);
+                ctx.lineTo(w * 0.46, h * 0.44);
+                ctx.lineTo(w * 0.82, h * 0.44);
+                ctx.lineTo(w * 0.76, h * 0.76);
+                ctx.lineTo(w * 0.22, h * 0.76);
+                ctx.closePath();
+                ctx.stroke();
+                return ;
+            }
             if (control.iconName.indexOf("shutdown") !== -1 || control.iconName.indexOf("power") !== -1) {
                 ctx.beginPath();
                 ctx.moveTo(w * 0.5, h * 0.16);

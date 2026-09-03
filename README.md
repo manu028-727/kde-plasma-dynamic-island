@@ -25,9 +25,31 @@ This applet is currently in an alpha state. It is usable, but bugs, visual glitc
 - Middle-click toggles media playback.
 - Scroll over the island to adjust the active player's volume.
 - Modular control center with a JSON-backed persistent layout, graphical edit mode, drag-to-swap tiles, corner resizing, a side module palette, and a fallback default module layout.
-- Control center modules include user/host/power options, media summary, notifications with clear-all, icon-fill volume up to 100%, brightness, Wi-Fi, Wi-Fi networks, Bluetooth, Bluetooth discovery, battery, power mode, light/dark appearance, Theme shortcut, KDE Connect, and Settings.
+- Control center modules include user/host/power options, media summary, notifications, volume control, brightness control, Wi-Fi, Bluetooth, battery, power mode, light/dark appearance, Theme shortcut, KDE Connect, and Settings.
 
 ## Install
+
+For the best visual result, install **Panel Colorizer** (`luisbocanegra.panel.colorizer`) first.
+
+Dynamic Island can run without Panel Colorizer in a normal Plasma panel, but Panel Colorizer is required for the included **Dynamic Island Panel** preset because the preset uses it to make the panel background fully transparent.
+
+### KDE Store
+
+Install **Dynamic Island** from Plasma's **Get New Widgets** flow, then add it from the widget picker.
+
+For the best result, put it alone in a small centered top panel:
+
+1. Add a new empty panel.
+2. Move it to the top edge.
+3. Set the panel length to fit content.
+4. Set alignment to center.
+5. Set height to about `50 px`. (the widget self adjusts but in my experience it looks best at 50px).
+6. Add only **Dynamic Island** to that panel.
+7. Set the panel opacity to translucent, or use Panel Colorizer for a fully invisible panel background.
+
+Dynamic Island still works in a normal panel; the dedicated transparent panel is only the intended visual setup.
+
+### Manual Install
 
 From this folder:
 
@@ -43,9 +65,33 @@ kpackagetool6 --type Plasma/Applet --upgrade .
 
 Then add **Dynamic Island** from Plasma's widget picker.
 
+### Optional Panel Preset
+
+This repository includes an optional Plasma panel preset in extras/for users installing from GitHub. It requires Panel Colorizer (`luisbocanegra.panel.colorizer`) for the intended transparent panel setup:
+
+```bash
+kpackagetool6 --type Plasma/LayoutTemplate --install extras/layout-template/com.manu028.dynamicisland.panel
+```
+
+You can either install it this way or follow the instructions in the KDE Store section to DIY.
+
+After installing it, use Plasma's **Add Panel** menu and choose **Dynamic Island Panel**. The preset creates a small centered top panel, adds this widget, adds Panel Colorizer, hides Panel Colorizer's own widget during normal use, and disables the native panel background for a transparent island panel.
+
+If you edit the preset, upgrade it with:
+
+```bash
+kpackagetool6 --type Plasma/LayoutTemplate --upgrade extras/layout-template/com.manu028.dynamicisland.panel
+```
+
+## Releases
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
 ## Intended Panel Setup
 
-Dynamic Island is designed to sit by itself on a fully transparent, always on top, floating Plasma panel whose width is set to fit its contents. For the intended look and behavior, make the panel content-wide, enable floating mode, remove any panel background/opacity, and keep Dynamic Island as the only widget on that panel.
+Dynamic Island is designed to sit by itself on a fully transparent, always on top, floating Plasma panel whose width is set to fit its contents. For the intended look and behavior, make the panel content-wide, enable floating mode, set the height to about `50 px`, remove any panel background/opacity, and keep Dynamic Island as the only visible widget on that panel.
+
+KDE Store installs only the plasmoid package itself. The optional panel preset in this repository is provided for manual/GitHub installs because Plasma applets and panel layout templates are separate KDE package types.
 
 ## Notes
 

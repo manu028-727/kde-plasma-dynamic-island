@@ -1,0 +1,22 @@
+{
+    "KPackageStructure": "Plasma/LayoutTemplate",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "manueldistefano@live.it",
+                "Name": "Manuel Di Stefano"
+            }
+        ],
+        "Category": "",
+        "Description": "A centered top panel preset for the Dynamic Island plasmoid.",
+        "EnabledByDefault": true,
+        "Id": "com.manu028.dynamicisland.panel",
+        "License": "GPL-3.0-or-later",
+        "Name": "Dynamic Island Panel",
+        "Website": "https://store.kde.org/"
+    },
+    "X-Plasma-ContainmentCategories": [
+        "panel"
+    ],
+    "X-Plasma-Shell": "plasmashell"
+}
