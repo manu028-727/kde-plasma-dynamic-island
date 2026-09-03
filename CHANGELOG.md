@@ -2,7 +2,7 @@
 
 All notable user-facing changes should be documented here.
 
-## Unreleased
+## 0.2.0
 
 - Split the control center editor into its own QML component while keeping the tile renderer in the main island file.
 - Moved control center tile bodies into dedicated QML components under `contents/ui/controlcenter/`.
