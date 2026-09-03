@@ -51,6 +51,13 @@ Dynamic Island still works in a normal panel; the dedicated transparent panel is
 
 ### Manual Install
 
+Clone the repository and move into the project folder:
+
+```bash
+git clone https://github.com/manu028-727/kde-plasma-dynamic-island.git
+cd kde-plasma-dynamic-island
+```
+
 From this folder:
 
 ```bash
@@ -65,9 +72,9 @@ kpackagetool6 --type Plasma/Applet --upgrade .
 
 Then add **Dynamic Island** from Plasma's widget picker.
 
-### Optional Panel Preset
+#### Optional Panel Preset
 
-This repository includes an optional Plasma panel preset in extras/for users installing from GitHub. It requires Panel Colorizer (`luisbocanegra.panel.colorizer`) for the intended transparent panel setup:
+This repository includes an optional Plasma panel preset in extras/for users installing from cloning the GitHub repository. It is not shipped in the .plasmoid release or in KDE Store because it requires Panel Colorizer (`luisbocanegra.panel.colorizer`) for the intended transparent panel setup. To install it, from the root of the project folder:
 
 ```bash
 kpackagetool6 --type Plasma/LayoutTemplate --install extras/layout-template/com.manu028.dynamicisland.panel
