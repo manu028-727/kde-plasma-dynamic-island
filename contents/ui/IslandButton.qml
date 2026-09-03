@@ -1,9 +1,11 @@
 import QtQuick
+import QtQuick.Controls as QQC2
 
 Item {
     id: control
 
     property string iconName: ""
+    property string tooltipText: ""
     property bool emphasized: false
     property bool compact: false
 
@@ -93,13 +95,33 @@ Item {
                 triangle(ctx, w * 0.42, h * 0.2, w * 0.82, h * 0.5, w * 0.42, h * 0.8);
                 return ;
             }
-            if (control.iconName.indexOf("close") !== -1 || control.iconName.indexOf("stop") !== -1) {
+            if (control.iconName.indexOf("close") !== -1 || control.iconName.indexOf("cancel") !== -1 || control.iconName.indexOf("stop") !== -1) {
                 ctx.beginPath();
                 ctx.moveTo(w * 0.25, h * 0.25);
                 ctx.lineTo(w * 0.75, h * 0.75);
                 ctx.moveTo(w * 0.75, h * 0.25);
                 ctx.lineTo(w * 0.25, h * 0.75);
                 ctx.stroke();
+                return ;
+            }
+            if (control.iconName.indexOf("restore") !== -1 || control.iconName.indexOf("defaults") !== -1) {
+                ctx.beginPath();
+                ctx.moveTo(w * 0.2, h * 0.42);
+                ctx.lineTo(w * 0.5, h * 0.18);
+                ctx.lineTo(w * 0.8, h * 0.42);
+                ctx.stroke();
+                roundFill(ctx, w * 0.28, h * 0.44, w * 0.44, h * 0.32, w * 0.05);
+                ctx.fillStyle = "#17171d";
+                roundFill(ctx, w * 0.43, h * 0.56, w * 0.14, h * 0.2, w * 0.03);
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(w * 0.68, h * 0.66, w * 0.18, Math.PI * 0.25, Math.PI * 1.58);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(w * 0.5, h * 0.67);
+                ctx.lineTo(w * 0.64, h * 0.8);
+                ctx.lineTo(w * 0.66, h * 0.6);
+                ctx.fill();
                 return ;
             }
             if (control.iconName.indexOf("apply") !== -1 || control.iconName.indexOf("ok") !== -1) {
@@ -263,5 +285,9 @@ Item {
         enabled: control.enabled
         onClicked: control.clicked()
     }
+
+    QQC2.ToolTip.visible: mouse.containsMouse && control.tooltipText.length > 0
+    QQC2.ToolTip.text: control.tooltipText
+    QQC2.ToolTip.delay: 350
 
 }

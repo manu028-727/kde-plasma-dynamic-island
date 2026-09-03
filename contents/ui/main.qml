@@ -48,6 +48,7 @@ PlasmoidItem {
     property bool popupAcceptsFocus: false
     property bool controlEditMode: false
     property int controlLayoutRevision: 0
+    property var controlLayoutDraft: []
     property string systemUsername: ""
     property string systemHostname: ""
     property string profileImageUrl: ""
@@ -659,8 +660,7 @@ PlasmoidItem {
         };
     }
 
-    function controlLayout() {
-        controlLayoutRevision;
+    function committedControlLayout() {
         const raw = Plasmoid.configuration.controlCenterLayoutJson || "";
         if (raw.length > 0) {
             try {
@@ -673,6 +673,14 @@ PlasmoidItem {
             }
         }
         return defaultControlLayout();
+    }
+
+    function controlLayout() {
+        controlLayoutRevision;
+        if (controlEditMode && Array.isArray(controlLayoutDraft))
+            return sanitizeControlLayout(controlLayoutDraft);
+
+        return committedControlLayout();
     }
 
     function sanitizeControlLayout(layout) {
@@ -712,14 +720,47 @@ PlasmoidItem {
         controlLayoutRevision++;
     }
 
+    function updateControlLayout(layout) {
+        if (controlEditMode) {
+            controlLayoutDraft = sanitizeControlLayout(layout);
+            controlLayoutRevision++;
+        } else {
+            saveControlLayout(layout);
+        }
+    }
+
     function ensureControlLayout() {
         if (!Plasmoid.configuration.controlCenterLayoutJson || Plasmoid.configuration.controlCenterLayoutJson.length === 0)
             saveControlLayout(defaultControlLayout());
 
     }
 
+    function beginControlEdit() {
+        controlLayoutDraft = committedControlLayout();
+        controlEditMode = true;
+        controlLayoutRevision++;
+    }
+
+    function saveControlEdit() {
+        if (!controlEditMode)
+            return ;
+
+        saveControlLayout(controlLayoutDraft);
+        controlLayoutDraft = [];
+        controlEditMode = false;
+    }
+
+    function cancelControlEdit() {
+        if (!controlEditMode)
+            return ;
+
+        controlLayoutDraft = [];
+        controlEditMode = false;
+        controlLayoutRevision++;
+    }
+
     function resetControlLayout() {
-        saveControlLayout(defaultControlLayout());
+        updateControlLayout(defaultControlLayout());
     }
 
     function removeControlModule(index) {
@@ -728,7 +769,7 @@ PlasmoidItem {
             return ;
 
         layout.splice(index, 1);
-        saveControlLayout(layout);
+        updateControlLayout(layout);
     }
 
     function addControlModule(id) {
@@ -748,7 +789,7 @@ PlasmoidItem {
         else
             layout.push(item);
 
-        saveControlLayout(layout);
+        updateControlLayout(layout);
     }
 
     function moduleInfo(id) {
@@ -2072,6 +2113,42 @@ PlasmoidItem {
                 return placed[id] || { "col": 0, "row": 0, "w": 1, "h": 1, "order": 0 };
             }
 
+            function dropPlaceholderPlacement() {
+                if (!root.controlEditMode || !root.controlDragActive || root.controlDropOnPalette || root.controlDropCol < 0 || root.controlDropRow < 0)
+                    return { "visible": false, "col": 0, "row": 0, "w": 1, "h": 1 };
+
+                const placed = packedLayout();
+                const placeholder = placed.__dropPlaceholder;
+                if (!placeholder)
+                    return { "visible": false, "col": 0, "row": 0, "w": 1, "h": 1 };
+
+                return {
+                    "visible": true,
+                    "col": placeholder.col,
+                    "row": placeholder.row,
+                    "w": placeholder.w,
+                    "h": placeholder.h
+                };
+            }
+
+            function gridX(col) {
+                return col * (moduleGrid.unitSize + moduleGrid.gap);
+            }
+
+            function gridY(row) {
+                return row * (moduleGrid.unitSize + moduleGrid.gap);
+            }
+
+            function gridWidth(widthUnits) {
+                const units = Math.max(1, Math.round(widthUnits || 1));
+                return units * moduleGrid.unitSize + (units - 1) * moduleGrid.gap;
+            }
+
+            function gridHeight(heightUnits) {
+                const units = Math.max(1, Math.round(heightUnits || 1));
+                return units * moduleGrid.unitSize + (units - 1) * moduleGrid.gap;
+            }
+
             function packedHeight() {
                 const placed = packedLayout();
                 return placed.__rows * moduleGrid.unitSize + Math.max(0, placed.__rows - 1) * moduleGrid.gap;
@@ -2157,7 +2234,7 @@ PlasmoidItem {
                         "v": 2
                     });
                 }
-                root.saveControlLayout(saved);
+                root.updateControlLayout(saved);
             }
 
             function commitControlResize(source, widthUnits, heightUnits) {
@@ -2193,7 +2270,7 @@ PlasmoidItem {
                         "v": 2
                     });
                 }
-                root.saveControlLayout(saved);
+                root.updateControlLayout(saved);
             }
 
             RowLayout {
@@ -2216,19 +2293,37 @@ PlasmoidItem {
                 }
 
                 IslandButton {
-                    iconName: root.controlEditMode ? "dialog-ok-apply" : "document-edit"
+                    visible: !root.controlEditMode
+                    iconName: "document-edit"
                     compact: true
-                    emphasized: root.controlEditMode
-                    onClicked: root.controlEditMode = !root.controlEditMode
+                    tooltipText: "Edit layout"
+                    onClicked: root.beginControlEdit()
                 }
 
                 IslandButton {
                     visible: root.controlEditMode
-                    iconName: "edit-undo"
+                    iconName: "dialog-cancel"
                     compact: true
+                    tooltipText: "Cancel changes"
+                    onClicked: root.cancelControlEdit()
+                }
+
+                IslandButton {
+                    visible: root.controlEditMode
+                    iconName: "restore-defaults"
+                    compact: true
+                    tooltipText: "Reset draft to default"
                     onClicked: root.resetControlLayout()
                 }
 
+                IslandButton {
+                    visible: root.controlEditMode
+                    iconName: "dialog-ok-apply"
+                    compact: true
+                    emphasized: true
+                    tooltipText: "Save layout"
+                    onClicked: root.saveControlEdit()
+                }
             }
 
             Flickable {
@@ -2253,6 +2348,58 @@ PlasmoidItem {
                     property int columns: 8
                     property int gap: 8
                     property real unitSize: Math.floor((width - gap * (columns - 1)) / columns)
+                    readonly property var dropPreview: controlPage.dropPlaceholderPlacement()
+
+                    Rectangle {
+                        id: dropReservedSpace
+
+                        visible: moduleGrid.dropPreview.visible
+                        x: controlPage.gridX(moduleGrid.dropPreview.col)
+                        y: controlPage.gridY(moduleGrid.dropPreview.row)
+                        width: controlPage.gridWidth(moduleGrid.dropPreview.w)
+                        height: controlPage.gridHeight(moduleGrid.dropPreview.h)
+                        radius: Math.min(18, Math.min(width, height) / 2)
+                        color: "#171824"
+                        border.color: "#8e8eff"
+                        border.width: 2
+                        opacity: visible ? 0.92 : 0
+                        z: 0
+
+                        Behavior on x {
+                            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
+                        }
+
+                        Behavior on y {
+                            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
+                        }
+
+                        Behavior on width {
+                            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
+                        }
+
+                        Behavior on height {
+                            NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: 5
+                            radius: Math.max(1, parent.radius - 5)
+                            color: "transparent"
+                            border.color: "#3e4052"
+                            border.width: 1
+                            opacity: 0.85
+                        }
+
+                        Kirigami.Icon {
+                            anchors.centerIn: parent
+                            width: Math.max(16, Math.min(30, parent.width - 18, parent.height - 18))
+                            height: width
+                            source: root.controlDragIcon
+                            color: "#d8d8ff"
+                            opacity: 0.62
+                        }
+                    }
 
                     Repeater {
                         id: moduleRepeater
@@ -2265,10 +2412,10 @@ PlasmoidItem {
 
                             readonly property var packed: controlPage.placementFor(modelData.id)
 
-                            x: packed.col * (moduleGrid.unitSize + moduleGrid.gap)
-                            y: packed.row * (moduleGrid.unitSize + moduleGrid.gap)
-                            width: packed.w * moduleGrid.unitSize + (packed.w - 1) * moduleGrid.gap
-                            height: packed.h * moduleGrid.unitSize + (packed.h - 1) * moduleGrid.gap
+                            x: controlPage.gridX(packed.col)
+                            y: controlPage.gridY(packed.row)
+                            width: controlPage.gridWidth(packed.w)
+                            height: controlPage.gridHeight(packed.h)
                             moduleId: modelData.id
                             moduleIndex: index
                             moduleWidthUnits: modelData.w || 1
@@ -2368,7 +2515,7 @@ PlasmoidItem {
         border.width: 1
         clip: true
         opacity: root.controlDragActive && root.controlDragSource === moduleCard ? 0 : 1
-        z: 0
+        z: 2
         scale: 1
 
         Behavior on scale {
