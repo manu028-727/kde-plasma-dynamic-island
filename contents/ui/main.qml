@@ -1798,8 +1798,6 @@ PlasmoidItem {
         type: PlasmaCore.Dialog.Dock
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | (root.popupAcceptsFocus ? 0 : Qt.WindowDoesNotAcceptFocus)
         backgroundHints: PlasmaCore.Dialog.NoBackground
-        marginsEnabled: false
-        shadowEnabled: false
         hideOnWindowDeactivate: false
         visible: root.dialogVisible
         onVisibleChanged: {
