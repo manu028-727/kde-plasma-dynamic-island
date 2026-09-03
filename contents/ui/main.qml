@@ -57,6 +57,11 @@ PlasmoidItem {
     property string popupMode: "control"
     property int clickButton: Qt.NoButton
     property int mediaPlayerRevision: 0
+    property string screenBrightnessDisplayName: ""
+    property int screenBrightnessValue: 0
+    property int screenBrightnessMax: 100
+    property int screenBrightnessVisualPercent: 0
+    property bool screenBrightnessVisualPinned: false
     property bool controlDragActive: false
     property var controlDragSource: null
     property string controlDragIcon: ""
@@ -75,6 +80,12 @@ PlasmoidItem {
     property int controlResizeWidthUnits: 1
     property int controlResizeHeightUnits: 1
     readonly property string accountIconCommand: "sh -c 'user=$(id -un); path=$(qdbus6 org.freedesktop.Accounts /org/freedesktop/Accounts org.freedesktop.Accounts.FindUserByName \"$user\" 2>/dev/null); test -n \"$path\" && qdbus6 org.freedesktop.Accounts \"$path\" org.freedesktop.Accounts.User.IconFile 2>/dev/null'"
+
+    onControlEditModeChanged: {
+        if (!controlEditMode)
+            resetControlInteractionState();
+
+    }
 
     readonly property var controlModules: [
         { "id": "userPower", "name": "User + Power" },
@@ -139,18 +150,7 @@ PlasmoidItem {
         activityPopupTimer.stop();
         openHandoffTimer.stop();
         popupAcceptsFocus = false;
-        controlDragActive = false;
-        controlResizeActive = false;
-        controlDropCol = -1;
-        controlDropRow = -1;
-        controlDropOnPalette = false;
-        controlDragSource = null;
-        controlDragOffsetCol = 0;
-        controlDragOffsetRow = 0;
-        controlResizeSource = null;
-        controlResizeIndex = -1;
-        controlResizeWidthUnits = 1;
-        controlResizeHeightUnits = 1;
+        resetControlInteractionState();
         if (!panelHidden && !islandOpen) {
             dialogVisible = false;
             return ;
@@ -241,6 +241,57 @@ PlasmoidItem {
         return String(text || "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
     }
 
+    function finiteNumber(value, fallbackValue) {
+        const number = Number(value);
+        return isFinite(number) ? number : fallbackValue;
+    }
+
+    function clampNumber(value, minimumValue, maximumValue) {
+        const minimum = finiteNumber(minimumValue, 0);
+        const maximum = Math.max(minimum, finiteNumber(maximumValue, minimum));
+        return Math.max(minimum, Math.min(maximum, finiteNumber(value, minimum)));
+    }
+
+    function percentFromRatio(value, maximumValue) {
+        const maximum = Math.max(1, finiteNumber(maximumValue, 1));
+        return Math.round(clampNumber(value, 0, maximum) / maximum * 100);
+    }
+
+    function firstValidNumber(values, fallbackValue) {
+        for (let i = 0; i < values.length; ++i) {
+            const number = Number(values[i]);
+            if (isFinite(number))
+                return number;
+
+        }
+        return fallbackValue;
+    }
+
+    function commandStdout(data) {
+        if (!data)
+            return "";
+
+        if (data.stdout !== undefined && data.stdout !== null)
+            return data.stdout;
+
+        return data["stdout"] || "";
+    }
+
+    function resetControlInteractionState() {
+        controlDragActive = false;
+        controlResizeActive = false;
+        controlDropCol = -1;
+        controlDropRow = -1;
+        controlDropOnPalette = false;
+        controlDragSource = null;
+        controlDragOffsetCol = 0;
+        controlDragOffsetRow = 0;
+        controlResizeSource = null;
+        controlResizeIndex = -1;
+        controlResizeWidthUnits = 1;
+        controlResizeHeightUnits = 1;
+    }
+
     function mediaText(value) {
         return String(value || "").replace(/\s+/g, " ").trim();
     }
@@ -249,7 +300,7 @@ PlasmoidItem {
         if (!playerLike)
             return false;
 
-        return mediaText(playerLike.track).length > 0 || mediaText(playerLike.artist).length > 0 || mediaText(playerLike.album).length > 0 || mediaText(playerLike.artUrl).length > 0 || Number(playerLike.length || 0) > 0;
+        return mediaText(playerLike.track).length > 0 || mediaText(playerLike.artist).length > 0 || mediaText(playerLike.album).length > 0 || mediaText(playerLike.artUrl).length > 0 || finiteNumber(playerLike.length, 0) > 0;
     }
 
     function mediaIsBrowserish(playerLike) {
@@ -288,7 +339,7 @@ PlasmoidItem {
             score += 20;
         if (mediaText(playerLike.artUrl).length > 0)
             score += 20;
-        if (Number(playerLike.length || 0) > 0)
+        if (finiteNumber(playerLike.length, 0) > 0)
             score += 25;
         if (playerLike.canControl)
             score += 10;
@@ -366,28 +417,72 @@ PlasmoidItem {
     }
 
     function screenBrightnessPercent() {
+        if (screenBrightnessDisplayName.length > 0 && screenBrightnessMax > 0)
+            return percentFromRatio(screenBrightnessValue, screenBrightnessMax);
+
         const displays = screenBrightness.displays;
         if (!screenBrightness.isBrightnessAvailable || !displays || displays.count <= 0)
             return 0;
 
         const idx = displays.index(0, 0);
-        const value = displays.data(idx, 258) || displays.data(idx, 257) || 0;
-        const max = displays.data(idx, 259) || displays.data(idx, 260) || 100;
-        return Math.max(0, Math.min(100, Math.round(value / Math.max(1, max) * 100)));
+        const value = firstValidNumber([displays.data(idx, 258), displays.data(idx, 257)], 0);
+        const max = firstValidNumber([displays.data(idx, 259), displays.data(idx, 260)], 100);
+        return percentFromRatio(value, max);
+    }
+
+    function displayedScreenBrightnessPercent() {
+        if (!screenBrightness.isBrightnessAvailable)
+            return 0;
+
+        return screenBrightnessVisualPinned ? screenBrightnessVisualPercent : screenBrightnessPercent();
+    }
+
+    function syncScreenBrightnessDisplay(displayName, value, max) {
+        const safeMax = Math.max(1, Math.round(finiteNumber(max, 100)));
+        const safeValue = Math.round(clampNumber(value, 0, safeMax));
+        const percent = percentFromRatio(safeValue, safeMax);
+
+        screenBrightnessDisplayName = displayName || "";
+        screenBrightnessValue = safeValue;
+        screenBrightnessMax = safeMax;
+
+        if (!screenBrightnessVisualPinned || Math.abs(percent - screenBrightnessVisualPercent) <= 1) {
+            screenBrightnessVisualPercent = percent;
+            screenBrightnessVisualPinned = false;
+        }
+    }
+
+    function setScreenBrightnessPercent(value) {
+        if (!screenBrightness.isBrightnessAvailable)
+            return ;
+
+        const percent = Math.round(clampNumber(value, 0, 100));
+        screenBrightnessVisualPercent = percent;
+        screenBrightnessVisualPinned = true;
+        screenBrightnessSettleTimer.restart();
+
+        if (screenBrightnessDisplayName.length > 0 && screenBrightnessMax > 0) {
+            screenBrightness.setBrightness(screenBrightnessDisplayName, Math.round(screenBrightnessMax * percent / 100));
+        } else {
+            screenBrightness.adjustBrightnessRatio((percent - screenBrightnessPercent()) / 100);
+        }
     }
 
     function keyboardBrightnessPercent() {
         if (!keyboardBrightness.isBrightnessAvailable || keyboardBrightness.brightnessMax <= 0)
             return 0;
 
-        return Math.max(0, Math.min(100, Math.round(keyboardBrightness.brightness / keyboardBrightness.brightnessMax * 100)));
+        const value = finiteNumber(keyboardBrightness.brightness, 0);
+        const max = finiteNumber(keyboardBrightness.brightnessMax, 0);
+        return max > 0 ? percentFromRatio(value, max) : 0;
     }
 
     function setKeyboardBrightnessPercent(value) {
         if (!keyboardBrightness.isBrightnessAvailable || keyboardBrightness.brightnessMax <= 0)
             return ;
 
-        keyboardBrightness.brightness = Math.round(keyboardBrightness.brightnessMax * Math.max(0, Math.min(100, value)) / 100);
+        const percent = clampNumber(value, 0, 100);
+        keyboardBrightness.brightness = Math.round(keyboardBrightness.brightnessMax * percent / 100);
     }
 
     function adjustSystemVolume(up) {
@@ -406,7 +501,8 @@ PlasmoidItem {
         if (!sink)
             return 0;
 
-        return Math.max(0, Math.min(150, Math.round(sink.volume / PulseAudio.NormalVolume * 100)));
+        const volume = finiteNumber(sink.volume, 0);
+        return Math.max(0, Math.min(150, percentFromRatio(volume, PulseAudio.NormalVolume)));
     }
 
     function setSystemVolumePercent(value) {
@@ -414,8 +510,9 @@ PlasmoidItem {
         if (!sink)
             return ;
 
+        const percent = clampNumber(value, 0, 100);
         sink.muted = false;
-        sink.volume = Math.round(PulseAudio.NormalVolume * Math.max(0, Math.min(100, value)) / 100);
+        sink.volume = Math.round(PulseAudio.NormalVolume * percent / 100);
     }
 
     function toggleSystemMute() {
@@ -544,12 +641,21 @@ PlasmoidItem {
         return { "w": 8, "h": id === "userPower" ? 3 : 6 };
     }
 
+    function controlModuleDefaultSize(id) {
+        return {
+            "id": id,
+            "w": id === "media" || id === "volume" || id === "brightness" ? 8 : id === "notifications" || id === "wifiDevices" || id === "bluetoothDiscovery" ? 4 : 2,
+            "h": id === "media" || id === "notifications" ? 4 : 2,
+            "v": 2
+        };
+    }
+
     function clampedControlModule(id, widthUnits, heightUnits) {
         const minSize = controlModuleMinSize(id);
         const maxSize = controlModuleMaxSize(id);
         return {
-            "w": Math.max(minSize.w, Math.min(maxSize.w, Math.round(widthUnits || minSize.w))),
-            "h": Math.max(minSize.h, Math.min(maxSize.h, Math.round(heightUnits || minSize.h)))
+            "w": Math.round(clampNumber(widthUnits, minSize.w, maxSize.w)),
+            "h": Math.round(clampNumber(heightUnits, minSize.h, maxSize.h))
         };
     }
 
@@ -583,8 +689,8 @@ PlasmoidItem {
 
             const migrated = item.v === 2;
             const size = clampedControlModule(item.id, (item.w || 1) * (migrated ? 1 : 2), (item.h || 1) * (migrated ? 1 : 2));
-            const col = isFinite(item.col) ? Math.max(0, Math.min(7, Math.round(item.col))) : -1;
-            const row = isFinite(item.row) ? Math.max(0, Math.round(item.row)) : -1;
+            const col = isFinite(Number(item.col)) ? Math.round(clampNumber(item.col, 0, 7)) : -1;
+            const row = isFinite(Number(item.row)) ? Math.max(0, Math.round(finiteNumber(item.row, 0))) : -1;
             const saved = {
                 "id": item.id,
                 "w": size.w,
@@ -636,36 +742,12 @@ PlasmoidItem {
                 return ;
 
         }
-        const item = {
-            "id": id,
-            "w": id === "media" || id === "volume" || id === "brightness" ? 8 : id === "notifications" || id === "wifiDevices" || id === "bluetoothDiscovery" ? 4 : 2,
-            "h": id === "media" || id === "notifications" ? 4 : 2,
-            "v": 2
-        };
+        const item = controlModuleDefaultSize(id);
         if (target >= 0 && target <= layout.length)
             layout.splice(target, 0, item);
         else
             layout.push(item);
 
-        saveControlLayout(layout);
-    }
-
-    function insertControlModuleAtCell(id, col, row) {
-        const layout = controlLayout();
-        for (let i = 0; i < layout.length; ++i) {
-            if (layout[i].id === id)
-                return ;
-
-        }
-        const item = {
-            "id": id,
-            "w": id === "media" || id === "volume" || id === "brightness" ? 8 : id === "notifications" || id === "wifiDevices" || id === "bluetoothDiscovery" ? 4 : 2,
-            "h": id === "media" || id === "notifications" ? 4 : 2,
-            "v": 2
-        };
-        item.col = Math.max(0, Math.min(8 - Math.max(1, item.w || 1), Math.round(col)));
-        item.row = Math.max(0, Math.round(row));
-        layout.push(item);
         saveControlLayout(layout);
     }
 
@@ -749,7 +831,7 @@ PlasmoidItem {
             return 0;
 
         const match = rows[0].match(/(\d+)%$/);
-        return match ? Math.max(0, Math.min(100, Number(match[1]))) : 0;
+        return match ? clampNumber(match[1], 0, 100) : 0;
     }
 
     function networkSummary() {
@@ -764,19 +846,42 @@ PlasmoidItem {
         const lines = String(text || "").split("\n");
         const out = [];
         for (let i = 0; i < lines.length; ++i) {
-            const parts = lines[i].split(":");
+            const parts = splitNmcliFields(lines[i]);
             if (parts.length < 3)
                 continue;
 
             const active = parts[0] === "*";
             const ssid = parts[1] || "Hidden network";
-            const signal = parts[2] || "";
-            out.push((active ? "• " : "") + ssid + (signal.length > 0 ? " " + signal + "%" : ""));
+            const signal = clampNumber(parts[2], 0, 100);
+            out.push((active ? "• " : "") + ssid + (isFinite(Number(parts[2])) ? " " + signal + "%" : ""));
             if (out.length >= 3)
                 break;
 
         }
         return out.join("\n");
+    }
+
+    function splitNmcliFields(line) {
+        const fields = [];
+        let current = "";
+        let escaped = false;
+        const text = String(line || "");
+        for (let i = 0; i < text.length; ++i) {
+            const ch = text.charAt(i);
+            if (escaped) {
+                current += ch;
+                escaped = false;
+            } else if (ch === "\\") {
+                escaped = true;
+            } else if (ch === ":") {
+                fields.push(current);
+                current = "";
+            } else {
+                current += ch;
+            }
+        }
+        fields.push(current);
+        return fields;
     }
 
     function parseBluetoothDevices(text) {
@@ -978,7 +1083,7 @@ PlasmoidItem {
             readonly property string artist: model.artist || ""
             readonly property string album: model.album || ""
             readonly property string artUrl: model.artUrl || ""
-            readonly property real length: model.length || 0
+            readonly property real length: root.finiteNumber(model.length, 0)
             readonly property string identity: model.identity || ""
             readonly property string desktopEntry: model.desktopEntry || ""
             readonly property bool canControl: model.canControl || false
@@ -1002,6 +1107,38 @@ PlasmoidItem {
         id: screenBrightness
 
         isSilent: true
+    }
+
+    Instantiator {
+        model: screenBrightness.displays
+
+        delegate: QtObject {
+            required property int index
+            required property string displayName
+            required property int brightness
+            required property int maxBrightness
+
+            function syncIfPrimary() {
+                if (index === 0)
+                    root.syncScreenBrightnessDisplay(displayName, brightness, maxBrightness);
+            }
+
+            Component.onCompleted: syncIfPrimary()
+            onBrightnessChanged: syncIfPrimary()
+            onMaxBrightnessChanged: syncIfPrimary()
+            onDisplayNameChanged: syncIfPrimary()
+        }
+    }
+
+    Timer {
+        id: screenBrightnessSettleTimer
+
+        interval: 900
+        repeat: false
+        onTriggered: {
+            root.screenBrightnessVisualPinned = false;
+            root.screenBrightnessVisualPercent = root.screenBrightnessPercent();
+        }
     }
 
     Brightness.KeyboardBrightnessControl {
@@ -1043,7 +1180,8 @@ PlasmoidItem {
 
         engine: "executable"
         onNewData: (sourceName, data) => {
-            const out = root.cleanText(data.stdout || data["stdout"] || "");
+            const stdout = root.commandStdout(data);
+            const out = root.cleanText(stdout);
             if (sourceName === "whoami")
                 root.systemUsername = out;
             else if (sourceName === "hostname")
@@ -1053,9 +1191,9 @@ PlasmoidItem {
             else if (sourceName === "bluetoothctl show")
                 root.bluetoothPowered = out.indexOf("Powered: yes") !== -1;
             else if (sourceName === "bluetoothctl devices Connected")
-                root.bluetoothDevicesText = root.parseBluetoothDevices(data.stdout || data["stdout"] || "");
+                root.bluetoothDevicesText = root.parseBluetoothDevices(stdout);
             else if (sourceName === "nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no")
-                root.wifiNetworksText = root.parseWifiNetworks(data.stdout || data["stdout"] || "");
+                root.wifiNetworksText = root.parseWifiNetworks(stdout);
 
             disconnectSource(sourceName);
         }
@@ -1795,12 +1933,7 @@ PlasmoidItem {
             }
 
             function defaultModuleSize(id) {
-                return {
-                    "id": id,
-                    "w": id === "media" || id === "volume" || id === "brightness" ? 8 : id === "notifications" || id === "wifiDevices" || id === "bluetoothDiscovery" ? 4 : 2,
-                    "h": id === "media" || id === "notifications" ? 4 : 2,
-                    "v": 2
-                };
+                return root.controlModuleDefaultSize(id);
             }
 
             function visualLayout() {
@@ -1889,7 +2022,7 @@ PlasmoidItem {
                     const h = Math.max(1, Math.min(6, Math.round(item.h || 1)));
                     let row = 0;
                     let found = false;
-                    if (isFinite(item.col) && isFinite(item.row)) {
+                    if (isFinite(Number(item.col)) && isFinite(Number(item.row))) {
                         const col = Math.max(0, Math.min(moduleGrid.columns - w, Math.round(item.col)));
                         row = Math.max(0, Math.round(item.row));
                         if (canPlace(occupied, col, row, w, h)) {
@@ -2322,15 +2455,23 @@ PlasmoidItem {
             hoverEnabled: true
             drag.threshold: 8
             acceptedButtons: Qt.LeftButton
+            preventStealing: true
             onPressed: (mouse) => {
+                mouse.accepted = true;
                 const local = dragArea.mapToItem(moduleCard, mouse.x, mouse.y);
                 const pitch = Math.max(1, moduleCard.gridUnitSize + moduleCard.gridGap);
                 root.controlDragOffsetCol = Math.max(0, Math.min(moduleCard.moduleWidthUnits - 1, Math.floor(local.x / pitch)));
                 root.controlDragOffsetRow = Math.max(0, Math.min(moduleCard.moduleHeightUnits - 1, Math.floor(local.y / pitch)));
                 root.beginControlDrag(moduleCard, dragArea, mouse, 54);
             }
-            onPositionChanged: (mouse) => root.updateControlDrag(dragArea, mouse)
-            onReleased: (mouse) => root.endControlDrag(dragArea, mouse, true)
+            onPositionChanged: (mouse) => {
+                mouse.accepted = true;
+                root.updateControlDrag(dragArea, mouse);
+            }
+            onReleased: (mouse) => {
+                mouse.accepted = true;
+                root.endControlDrag(dragArea, mouse, true);
+            }
             onCanceled: root.endControlDrag(null, null, false)
         }
 
@@ -2374,6 +2515,7 @@ PlasmoidItem {
             cursorShape: Qt.SizeFDiagCursor
             preventStealing: true
             onPressed: (mouse) => {
+                mouse.accepted = true;
                 const p = resizeHandle.mapToItem(dialogHost, mouse.x, mouse.y);
                 startPointerX = p.x;
                 startPointerY = p.y;
@@ -2385,13 +2527,17 @@ PlasmoidItem {
                 if (!pressed || !root.controlResizeActive)
                     return ;
 
+                mouse.accepted = true;
                 const p = resizeHandle.mapToItem(dialogHost, mouse.x, mouse.y);
                 const step = Math.max(1, moduleCard.gridUnitSize + moduleCard.gridGap);
                 const newW = startW + Math.round((p.x - startPointerX) / step);
                 const newH = startH + Math.round((p.y - startPointerY) / step);
                 root.updateControlResize(moduleCard, newW, newH);
             }
-            onReleased: root.endControlResize(moduleCard, true)
+            onReleased: (mouse) => {
+                mouse.accepted = true;
+                root.endControlResize(moduleCard, true);
+            }
             onCanceled: root.endControlResize(moduleCard, false)
 
             Canvas {
@@ -2434,10 +2580,10 @@ PlasmoidItem {
                 Rectangle {
                     id: profileAvatarFrame
 
-	                    width: userPowerContent.avatarSize
-	                    height: width
-	                    x: userPowerContent.narrow ? Math.round((parent.width - width) / 2) : userPowerContent.pad
-	                    y: userPowerContent.narrow && !userPowerContent.shortTile ? userPowerContent.pad : Math.round((parent.height - height) / 2)
+                    width: userPowerContent.avatarSize
+                    height: width
+                    x: userPowerContent.narrow ? Math.round((parent.width - width) / 2) : userPowerContent.pad
+                    y: userPowerContent.narrow && !userPowerContent.shortTile ? userPowerContent.pad : Math.round((parent.height - height) / 2)
                     radius: width / 2
                     color: "#24252e"
                     clip: true
@@ -2479,43 +2625,43 @@ PlasmoidItem {
                 }
 
                 Column {
-	                    id: profileTextColumn
+                    id: profileTextColumn
 
-	                    visible: !userPowerContent.micro || userPowerContent.shortTile && userPowerContent.width >= 92
-	                    x: userPowerContent.shortTile ? profileAvatarFrame.x + profileAvatarFrame.width + 8 : userPowerContent.compact ? userPowerContent.pad : profileAvatarFrame.x + profileAvatarFrame.width + 10
-	                    y: userPowerContent.shortTile ? Math.round((parent.height - height) / 2) : userPowerContent.compact ? profileAvatarFrame.y + profileAvatarFrame.height + 6 : Math.round((parent.height - height) / 2)
-	                    width: userPowerContent.shortTile ? Math.max(1, (powerButton.visible ? powerButton.x - x - 8 : parent.width - x - userPowerContent.pad)) : userPowerContent.compact ? Math.max(1, parent.width - userPowerContent.pad * 2) : Math.max(1, powerButton.x - x - 10)
-	                    spacing: userPowerContent.shortTile ? -1 : 1
+                    visible: !userPowerContent.micro || userPowerContent.shortTile && userPowerContent.width >= 92
+                    x: userPowerContent.shortTile ? profileAvatarFrame.x + profileAvatarFrame.width + 8 : userPowerContent.compact ? userPowerContent.pad : profileAvatarFrame.x + profileAvatarFrame.width + 10
+                    y: userPowerContent.shortTile ? Math.round((parent.height - height) / 2) : userPowerContent.compact ? profileAvatarFrame.y + profileAvatarFrame.height + 6 : Math.round((parent.height - height) / 2)
+                    width: userPowerContent.shortTile ? Math.max(1, (powerButton.visible ? powerButton.x - x - 8 : parent.width - x - userPowerContent.pad)) : userPowerContent.compact ? Math.max(1, parent.width - userPowerContent.pad * 2) : Math.max(1, powerButton.x - x - 10)
+                    spacing: userPowerContent.shortTile ? -1 : 1
 
-	                    QQC2.Label {
-	                        width: parent.width
-	                        text: root.systemUsername || "User"
-	                        color: "#f8f8fb"
-	                        font.pixelSize: userPowerContent.shortTile ? 10 : userPowerContent.compact ? 11 : 13
-	                        font.weight: Font.Bold
-	                        elide: Text.ElideRight
-	                        maximumLineCount: 1
+                    QQC2.Label {
+                        width: parent.width
+                        text: root.systemUsername || "User"
+                        color: "#f8f8fb"
+                        font.pixelSize: userPowerContent.shortTile ? 10 : userPowerContent.compact ? 11 : 13
+                        font.weight: Font.Bold
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
                     }
 
-	                    QQC2.Label {
-	                        visible: !userPowerContent.compact || userPowerContent.height >= 34
-	                        width: parent.width
-	                        text: root.systemHostname || "KDE Plasma"
-	                        color: "#8f9099"
-	                        font.pixelSize: userPowerContent.shortTile ? 8 : userPowerContent.compact ? 9 : 10
-	                        elide: Text.ElideRight
-	                        maximumLineCount: 1
+                    QQC2.Label {
+                        visible: !userPowerContent.compact || userPowerContent.height >= 34
+                        width: parent.width
+                        text: root.systemHostname || "KDE Plasma"
+                        color: "#8f9099"
+                        font.pixelSize: userPowerContent.shortTile ? 8 : userPowerContent.compact ? 9 : 10
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
                     }
                 }
 
                 IslandButton {
                     id: powerButton
 
-	                    x: userPowerContent.narrow ? Math.round((parent.width - width) / 2) : parent.width - width - userPowerContent.pad
-	                    y: userPowerContent.narrow ? parent.height - height - userPowerContent.pad : userPowerContent.compact ? userPowerContent.pad : Math.round((parent.height - height) / 2)
-	                    width: userPowerContent.buttonSize
-	                    height: width
-	                    visible: !userPowerContent.shortTile && (!userPowerContent.narrow || parent.height >= profileAvatarFrame.height + height + userPowerContent.pad * 3)
+                    x: userPowerContent.narrow ? Math.round((parent.width - width) / 2) : parent.width - width - userPowerContent.pad
+                    y: userPowerContent.narrow ? parent.height - height - userPowerContent.pad : userPowerContent.compact ? userPowerContent.pad : Math.round((parent.height - height) / 2)
+                    width: userPowerContent.buttonSize
+                    height: width
+                    visible: !userPowerContent.shortTile && (!userPowerContent.narrow || parent.height >= profileAvatarFrame.height + height + userPowerContent.pad * 3)
                     iconName: "system-shutdown"
                     compact: true
                     onClicked: powerMenu.open()
@@ -2611,15 +2757,15 @@ PlasmoidItem {
                 anchors.fill: parent
                 title: "Brightness"
                 iconName: "brightness-high"
-                valueText: screenBrightness.isBrightnessAvailable ? root.screenBrightnessPercent() + "%" : "--"
-                value: root.screenBrightnessPercent()
+                valueText: screenBrightness.isBrightnessAvailable ? root.displayedScreenBrightnessPercent() + "%" : "--"
+                value: root.displayedScreenBrightnessPercent()
                 accent: "#f5d64a"
                 enabled: screenBrightness.isBrightnessAvailable
                 actionIconName: "video-display"
                 secondaryActionIconName: keyboardBrightness.isBrightnessAvailable ? "input-keyboard" : ""
                 onActionTriggered: root.launchDisplaySettings()
                 onSecondaryActionTriggered: root.setKeyboardBrightnessPercent(root.keyboardBrightnessPercent() <= 20 ? 100 : 0)
-                onMoved: (value) => screenBrightness.adjustBrightnessRatio((value - root.screenBrightnessPercent()) / 100)
+                onMoved: (value) => root.setScreenBrightnessPercent(value)
             }
         }
 
@@ -3095,12 +3241,14 @@ PlasmoidItem {
             anchors.fill: parent
             hoverEnabled: true
             drag.threshold: 8
+            preventStealing: true
             onClicked: {
                 if (!movedEnough)
                     root.addControlModule(paletteModule.moduleId);
 
             }
             onPressed: (mouse) => {
+                mouse.accepted = true;
                 pressX = mouse.x;
                 pressY = mouse.y;
                 movedEnough = false;
@@ -3112,9 +3260,13 @@ PlasmoidItem {
                 if (Math.abs(mouse.x - pressX) > 8 || Math.abs(mouse.y - pressY) > 8)
                     movedEnough = true;
 
+                mouse.accepted = true;
                 root.updateControlDrag(paletteDrag, mouse);
             }
-            onReleased: (mouse) => root.endControlDrag(paletteDrag, mouse, movedEnough)
+            onReleased: (mouse) => {
+                mouse.accepted = true;
+                root.endControlDrag(paletteDrag, mouse, movedEnough);
+            }
             onCanceled: root.endControlDrag(null, null, false)
         }
 
@@ -3136,6 +3288,7 @@ PlasmoidItem {
         readonly property bool detailed: !iconOnly && width >= 142 && height >= 88
         readonly property bool hasAction: actionIconName.length > 0
         readonly property real contentMargin: iconOnly ? 6 : 8
+        readonly property real safeProgress: root.clampNumber(progress, 0, 100)
 
         signal triggered()
         signal actionTriggered()
@@ -3158,7 +3311,7 @@ PlasmoidItem {
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             width: parent.width
-            height: parent.height * Math.max(0, Math.min(100, simpleTile.progress)) / 100
+            height: parent.height * simpleTile.safeProgress / 100
             radius: Math.min(18, Math.min(parent.width, parent.height) / 2)
             color: simpleTile.accent
             opacity: 0.18
@@ -3223,7 +3376,7 @@ PlasmoidItem {
                         anchors.left: parent.left
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        width: parent.width * Math.max(0, Math.min(100, simpleTile.progress)) / 100
+                        width: parent.width * simpleTile.safeProgress / 100
                         radius: parent.radius
                         color: simpleTile.accent
                     }
@@ -3596,7 +3749,10 @@ PlasmoidItem {
         property color accent: "#5ac8fa"
         property string actionIconName: ""
         property string secondaryActionIconName: ""
-        readonly property real ratio: Math.max(0, Math.min(1, value / Math.max(1, toValue)))
+        readonly property real safeToValue: Math.max(1, root.finiteNumber(toValue, 100))
+        readonly property real safeValue: Math.max(0, Math.min(safeToValue, root.finiteNumber(value, 0)))
+        readonly property real ratio: safeValue / safeToValue
+        readonly property real fillRatio: ratio
         readonly property bool vertical: height > width * 1.25
         readonly property bool showActions: width >= 142 && height >= 72 && (actionIconName.length > 0 || secondaryActionIconName.length > 0)
 
@@ -3616,11 +3772,11 @@ PlasmoidItem {
             Rectangle {
                 anchors.left: parent.left
                 anchors.bottom: parent.bottom
-                width: controlSlider.vertical ? parent.width : parent.width * controlSlider.ratio
-                height: controlSlider.vertical ? parent.height * controlSlider.ratio : parent.height
+                width: controlSlider.vertical ? parent.width : parent.width * controlSlider.fillRatio
+                height: controlSlider.vertical ? parent.height * controlSlider.fillRatio : parent.height
                 radius: parent.radius
                 color: controlSlider.accent
-                opacity: controlSlider.enabled ? 0.92 : 0.24
+                opacity: controlSlider.enabled ? (root.controlEditMode ? 0.72 : 0.92) : 0.16
             }
 
             Rectangle {
@@ -3662,16 +3818,22 @@ PlasmoidItem {
             anchors.fill: parent
             hoverEnabled: true
             enabled: controlSlider.enabled && !root.controlEditMode
+            preventStealing: true
 
             function valueFromMouse(mouse) {
                 const pct = controlSlider.vertical ? 1 - mouse.y / Math.max(1, height) : mouse.x / Math.max(1, width);
-                return Math.round(Math.max(0, Math.min(1, pct)) * controlSlider.toValue);
+                return Math.round(Math.max(0, Math.min(1, pct)) * controlSlider.safeToValue);
             }
 
-            onPressed: (mouse) => controlSlider.moved(valueFromMouse(mouse))
+            onPressed: (mouse) => {
+                mouse.accepted = true;
+                controlSlider.moved(valueFromMouse(mouse));
+            }
             onPositionChanged: (mouse) => {
-                if (pressed)
+                if (pressed) {
+                    mouse.accepted = true;
                     controlSlider.moved(valueFromMouse(mouse));
+                }
 
             }
         }
@@ -3755,59 +3917,6 @@ PlasmoidItem {
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
                 maximumLineCount: 1
-            }
-
-        }
-
-    }
-
-    component MiniSlider: Item {
-        id: mini
-
-        property string label: ""
-        property string valueText: ""
-        property real value: 0
-        property real toValue: 100
-
-        signal moved(real value)
-
-        implicitHeight: 36
-
-        Rectangle {
-            anchors.fill: parent
-            radius: height / 2
-            color: "#15151b"
-            border.color: "#23232a"
-            border.width: 1
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            spacing: 7
-
-            QQC2.Label {
-                text: mini.label
-                color: "#ffffff"
-                font.pixelSize: 9
-                font.weight: Font.Bold
-            }
-
-            QQC2.Slider {
-                Layout.fillWidth: true
-                from: 0
-                to: mini.toValue
-                value: mini.value
-                enabled: mini.enabled
-                live: false
-                onMoved: mini.moved(value)
-            }
-
-            QQC2.Label {
-                text: mini.valueText
-                color: "#8f8f98"
-                font.pixelSize: 9
             }
 
         }
