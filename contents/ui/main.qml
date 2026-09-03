@@ -148,6 +148,9 @@ PlasmoidItem {
         if (!dialogVisible)
             return ;
 
+        if (popupMode === "control" && controlEditMode)
+            cancelControlEdit();
+
         activityPopupTimer.stop();
         openHandoffTimer.stop();
         popupAcceptsFocus = false;
@@ -212,7 +215,7 @@ PlasmoidItem {
 
     function notificationRows(limit) {
         const out = [];
-        const maxRows = Math.max(0, Math.round(limit || 0));
+        const maxRows = Math.max(0, Math.round(finiteNumber(limit, 0)));
         for (let i = 0; i < notifications.count; ++i) {
             if (rowValue(i, NotificationManager.Notifications.TypeRole, NotificationManager.Notifications.NoType) !== NotificationManager.Notifications.NotificationType)
                 continue;
@@ -696,7 +699,7 @@ PlasmoidItem {
                 continue;
 
             const migrated = item.v === 2;
-            const size = clampedControlModule(item.id, (item.w || 1) * (migrated ? 1 : 2), (item.h || 1) * (migrated ? 1 : 2));
+            const size = clampedControlModule(item.id, finiteNumber(item.w, 1) * (migrated ? 1 : 2), finiteNumber(item.h, 1) * (migrated ? 1 : 2));
             const col = isFinite(Number(item.col)) ? Math.round(clampNumber(item.col, 0, 7)) : -1;
             const row = isFinite(Number(item.row)) ? Math.max(0, Math.round(finiteNumber(item.row, 0))) : -1;
             const saved = {
@@ -847,7 +850,7 @@ PlasmoidItem {
     function wifiRows(limit) {
         const rows = [];
         const lines = root.wifiNetworksText.length > 0 ? root.wifiNetworksText.split("\n") : [];
-        const maxRows = Math.max(0, Math.round(limit || 0));
+        const maxRows = Math.max(0, Math.round(finiteNumber(limit, 0)));
         for (let i = 0; i < lines.length; ++i) {
             const line = String(lines[i] || "").trim();
             if (line.length <= 0)
@@ -1950,8 +1953,8 @@ PlasmoidItem {
                 const p = moduleGrid.mapFromItem(dialogHost, x, y);
                 const pitch = moduleGrid.unitSize + moduleGrid.gap;
                 const size = draggedSize();
-                const maxOffsetCol = Math.max(0, Math.min(moduleGrid.columns, Math.round(size.w || 1)) - 1);
-                const maxOffsetRow = Math.max(0, Math.round(size.h || 1) - 1);
+                const maxOffsetCol = Math.max(0, gridUnitWidth(size) - 1);
+                const maxOffsetRow = Math.max(0, gridUnitHeight(size) - 1);
                 return {
                     "col": Math.max(0, Math.min(moduleGrid.columns - 1, Math.floor(p.x / pitch) - Math.max(0, Math.min(maxOffsetCol, root.controlDragOffsetCol)))),
                     "row": Math.max(0, Math.floor(p.y / pitch) - Math.max(0, Math.min(maxOffsetRow, root.controlDragOffsetRow)))
@@ -1968,8 +1971,8 @@ PlasmoidItem {
                 }
 
                 return {
-                    "w": root.controlDragSource.moduleWidthUnits || 1,
-                    "h": root.controlDragSource.moduleHeightUnits || 1
+                    "w": root.controlDragSource.moduleWidthUnits,
+                    "h": root.controlDragSource.moduleHeightUnits
                 };
             }
 
@@ -1983,11 +1986,14 @@ PlasmoidItem {
                 if (root.controlResizeActive && root.controlResizeSource && root.controlResizeIndex >= 0 && root.controlResizeIndex < layout.length) {
                     const resized = layout.splice(root.controlResizeIndex, 1)[0];
                     const basePlaced = packLayout([resized].concat(layout));
-                    const basePlacement = basePlaced[resized.id] || { "col": resized.col || 0, "row": resized.row || 0 };
+                    const basePlacement = basePlaced[resized.id] || {
+                        "col": root.finiteNumber(resized.col, 0),
+                        "row": root.finiteNumber(resized.row, 0)
+                    };
                     resized.w = root.controlResizeWidthUnits;
                     resized.h = root.controlResizeHeightUnits;
-                    resized.col = Math.max(0, Math.min(moduleGrid.columns - Math.max(1, resized.w || 1), Math.round(basePlacement.col || 0)));
-                    resized.row = Math.max(0, Math.round(basePlacement.row || 0));
+                    resized.col = Math.max(0, Math.min(moduleGrid.columns - gridUnitWidth(resized), Math.round(root.finiteNumber(basePlacement.col, 0))));
+                    resized.row = Math.max(0, Math.round(root.finiteNumber(basePlacement.row, 0)));
                     layout.unshift(resized);
                     return layout;
                 }
@@ -1999,8 +2005,8 @@ PlasmoidItem {
                     ? defaultModuleSize(root.controlDragSource.moduleId)
                     : {
                         "id": "__dropPlaceholder",
-                        "w": root.controlDragSource.moduleWidthUnits || 1,
-                        "h": root.controlDragSource.moduleHeightUnits || 1,
+                        "w": root.controlDragSource.moduleWidthUnits,
+                        "h": root.controlDragSource.moduleHeightUnits,
                         "v": 2
                     };
                 placeholder.id = "__dropPlaceholder";
@@ -2048,8 +2054,16 @@ PlasmoidItem {
                     return false;
 
                 const size = draggedSize();
-                const w = Math.max(1, Math.min(moduleGrid.columns, Math.round(size.w || 1)));
+                const w = gridUnitWidth(size);
                 return col + w <= moduleGrid.columns;
+            }
+
+            function gridUnitWidth(item) {
+                return Math.round(root.clampNumber(item ? item.w : 1, 1, moduleGrid.columns));
+            }
+
+            function gridUnitHeight(item) {
+                return Math.round(root.clampNumber(item ? item.h : 1, 1, 6));
             }
 
             function packLayout(layout) {
@@ -2059,8 +2073,8 @@ PlasmoidItem {
 
                 for (let i = 0; i < layout.length; ++i) {
                     const item = layout[i] || {};
-                    const w = Math.max(1, Math.min(moduleGrid.columns, Math.round(item.w || 1)));
-                    const h = Math.max(1, Math.min(6, Math.round(item.h || 1)));
+                    const w = gridUnitWidth(item);
+                    const h = gridUnitHeight(item);
                     let row = 0;
                     let found = false;
                     if (isFinite(Number(item.col)) && isFinite(Number(item.row))) {
@@ -2108,16 +2122,16 @@ PlasmoidItem {
                 return packLayout(visualLayout());
             }
 
-            function placementFor(id) {
-                const placed = packedLayout();
+            function placementFor(id, placedLayout) {
+                const placed = placedLayout || packedLayout();
                 return placed[id] || { "col": 0, "row": 0, "w": 1, "h": 1, "order": 0 };
             }
 
-            function dropPlaceholderPlacement() {
+            function dropPlaceholderPlacement(placedLayout) {
                 if (!root.controlEditMode || !root.controlDragActive || root.controlDropOnPalette || root.controlDropCol < 0 || root.controlDropRow < 0)
                     return { "visible": false, "col": 0, "row": 0, "w": 1, "h": 1 };
 
-                const placed = packedLayout();
+                const placed = placedLayout || packedLayout();
                 const placeholder = placed.__dropPlaceholder;
                 if (!placeholder)
                     return { "visible": false, "col": 0, "row": 0, "w": 1, "h": 1 };
@@ -2140,12 +2154,12 @@ PlasmoidItem {
             }
 
             function gridWidth(widthUnits) {
-                const units = Math.max(1, Math.round(widthUnits || 1));
+                const units = Math.round(root.clampNumber(widthUnits, 1, moduleGrid.columns));
                 return units * moduleGrid.unitSize + (units - 1) * moduleGrid.gap;
             }
 
             function gridHeight(heightUnits) {
-                const units = Math.max(1, Math.round(heightUnits || 1));
+                const units = Math.round(root.clampNumber(heightUnits, 1, 6));
                 return units * moduleGrid.unitSize + (units - 1) * moduleGrid.gap;
             }
 
@@ -2213,7 +2227,7 @@ PlasmoidItem {
                     item = layout.splice(source.moduleIndex, 1)[0];
                 }
 
-                item.col = Math.max(0, Math.min(moduleGrid.columns - Math.max(1, item.w || 1), Math.round(col)));
+                item.col = Math.max(0, Math.min(moduleGrid.columns - gridUnitWidth(item), Math.round(col)));
                 item.row = Math.max(0, Math.round(row));
 
                 const ordered = [item].concat(layout);
@@ -2244,12 +2258,15 @@ PlasmoidItem {
 
                 const item = layout.splice(source.moduleIndex, 1)[0];
                 const basePlaced = packLayout([item].concat(layout));
-                const basePlacement = basePlaced[item.id] || { "col": item.col || 0, "row": item.row || 0 };
+                const basePlacement = basePlaced[item.id] || {
+                    "col": root.finiteNumber(item.col, 0),
+                    "row": root.finiteNumber(item.row, 0)
+                };
                 const size = root.clampedControlModule(item.id, widthUnits, heightUnits);
                 item.w = size.w;
                 item.h = size.h;
-                item.col = Math.max(0, Math.min(moduleGrid.columns - item.w, Math.round(basePlacement.col || 0)));
-                item.row = Math.max(0, Math.round(basePlacement.row || 0));
+                item.col = Math.max(0, Math.min(moduleGrid.columns - item.w, Math.round(root.finiteNumber(basePlacement.col, 0))));
+                item.row = Math.max(0, Math.round(root.finiteNumber(basePlacement.row, 0)));
                 item.v = 2;
 
                 const ordered = [item].concat(layout);
@@ -2348,7 +2365,8 @@ PlasmoidItem {
                     property int columns: 8
                     property int gap: 8
                     property real unitSize: Math.floor((width - gap * (columns - 1)) / columns)
-                    readonly property var dropPreview: controlPage.dropPlaceholderPlacement()
+                    readonly property var packedLayoutState: controlPage.packedLayout()
+                    readonly property var dropPreview: controlPage.dropPlaceholderPlacement(packedLayoutState)
 
                     Rectangle {
                         id: dropReservedSpace
@@ -2410,7 +2428,7 @@ PlasmoidItem {
                             required property var modelData
                             required property int index
 
-                            readonly property var packed: controlPage.placementFor(modelData.id)
+                            readonly property var packed: controlPage.placementFor(modelData.id, moduleGrid.packedLayoutState)
 
                             x: controlPage.gridX(packed.col)
                             y: controlPage.gridY(packed.row)
@@ -2418,8 +2436,8 @@ PlasmoidItem {
                             height: controlPage.gridHeight(packed.h)
                             moduleId: modelData.id
                             moduleIndex: index
-                            moduleWidthUnits: modelData.w || 1
-                            moduleHeightUnits: modelData.h || 1
+                            moduleWidthUnits: controlPage.gridUnitWidth(modelData)
+                            moduleHeightUnits: controlPage.gridUnitHeight(modelData)
                             gridUnitSize: moduleGrid.unitSize
                             gridGap: moduleGrid.gap
                         }
