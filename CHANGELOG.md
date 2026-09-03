@@ -18,6 +18,7 @@ All notable user-facing changes should be documented here.
 - Hardened control-center grid geometry against invalid host items, tiny popup widths, and non-finite placement values.
 - Hardened brightness, volume, progress, Wi-Fi parsing, and layout math against malformed or delayed runtime data.
 - Improved edit-mode mouse handling to reduce scroll/drag conflicts.
+- Updated the fallback control center layout to match the polished release layout.
 
 ## 0.1.2
 

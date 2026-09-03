@@ -19,23 +19,16 @@ const modules = [
     { "id": "settings", "name": "Settings", "icon": "systemsettings", "defaultW": 2, "defaultH": 2 }
 ];
 
-const defaultLayoutOrder = [
-    "userPower",
-    "batteryPercent",
-    "media",
-    "volume",
-    "brightness",
-    "wifi",
-    "wifiDevices",
-    "bluetooth",
-    "bluetoothDiscovery",
-    "notifications",
-    "batteryStatus",
-    "powerMode",
-    "appearanceMode",
-    "theme",
-    "kdeConnect",
-    "settings"
+const defaultLayoutItems = [
+    { "id": "settings", "w": 2, "h": 1, "v": 2, "col": 6, "row": 4 },
+    { "id": "notifications", "w": 8, "h": 6, "v": 2, "col": 0, "row": 12 },
+    { "id": "kdeConnect", "w": 8, "h": 4, "v": 2, "col": 0, "row": 8 },
+    { "id": "volume", "w": 1, "h": 4, "v": 2, "col": 6, "row": 0 },
+    { "id": "brightness", "w": 1, "h": 4, "v": 2, "col": 7, "row": 0 },
+    { "id": "bluetoothDiscovery", "w": 4, "h": 3, "v": 2, "col": 4, "row": 5 },
+    { "id": "wifiDevices", "w": 4, "h": 3, "v": 2, "col": 0, "row": 5 },
+    { "id": "media", "w": 6, "h": 3, "v": 2, "col": 0, "row": 2 },
+    { "id": "userPower", "w": 6, "h": 2, "v": 2, "col": 0, "row": 0 }
 ];
 
 function allModules() {
@@ -53,14 +46,8 @@ function info(id) {
 }
 
 function defaultLayout() {
-    return defaultLayoutOrder.map(function(id) {
-        const module = info(id);
-        return {
-            "id": module.id,
-            "w": module.defaultW || 2,
-            "h": module.defaultH || 2,
-            "v": 2
-        };
+    return defaultLayoutItems.map(function(item) {
+        return Object.assign({}, item);
     });
 }
 
