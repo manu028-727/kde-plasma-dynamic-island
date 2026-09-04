@@ -4,6 +4,10 @@ on:
   push:
     tags: ['v*']
 
+# Allow the workflow's GITHUB_TOKEN to create/update GitHub releases
+permissions:
+  contents: write
+
 jobs:
   package:
     name: Package .plasmoid
