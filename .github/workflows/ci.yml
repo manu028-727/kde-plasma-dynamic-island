@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-qml:
+    name: Lint QML (qmllint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-shapes qml6-module-qtquick-effects plasma-sdk
+
+      - name: Lint QML with qmllint
+        run: |
+          set +e
+          FAILED=0
+          while IFS= read -r f; do
+            echo "==> qmllint $f"
+            qmllint "$f" || FAILED=1
+          done < <(find contents -name '*.qml' -o -name '*.js')
+          if [ "$FAILED" -eq 1 ]; then echo "::error::qmllint failed"; exit 1; fi
+
+  package:
+    name: Package .plasmoid
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends plasma-sdk
+
+      - name: Determine version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package plasmoid
+        run: |
+          kpackagetool6 --type Plasma/Applet --pack . "dynamic-island-${{ steps.version.outputs.version }}.plasmoid"
+
+      - name: Show artifact
+        run: ls -la *.plasmoid
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dynamic-island-*.plasmoid

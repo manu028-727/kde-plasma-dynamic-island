@@ -126,6 +126,17 @@ Downloads appear when the app reports them as Plasma jobs, such as file copies o
 
 The control center layout is stored in Plasma configuration as JSON and is reset automatically to a default layout when no saved layout exists. In edit mode, drag tiles onto each other to swap placement, use the corner handle to resize, drag items from the side palette to add them, or drop existing tiles onto the palette to hide them.
 
+## Roadmap
+
+Planned and possible directions for the project. Items are not guaranteed and may change.
+
+- **Stable release (0.3.0)** — drop the Alpha status once CI is green and the widget is verified on supported Plasma 6 releases.
+- **Continuous packaging** — auto-build the `.plasmoid` from tags via CI and attach it to every release.
+- **Maintainability** — continue splitting the monolithic `main.qml` into dedicated components (media pill, jobs row, activity popup) following the 0.2.0 refactor pattern.
+- **Localization (i18n)** — translate user-facing strings into additional languages.
+- **Accessibility** — improved keyboard navigation and screen-reader labels.
+- **Theming options** — configurable pill appearance (corner radius, width, accent color) exposed in the widget configuration.
+
 ## License
 
 This project is licensed under the **GNU General Public License v3.0 or later** (GPL-3.0-or-later). The complete license text is available in [LICENSE](LICENSE) and on the [GNU website](https://www.gnu.org/licenses/gpl-3.0.html).

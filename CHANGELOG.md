@@ -2,6 +2,10 @@
 
 All notable user-facing changes should be documented here.
 
+## 0.2.2
+
+- Test release to validate the CI packaging workflow.
+
 ## 0.2.1
 
 - Improved compatibility for newer Plasma versions
