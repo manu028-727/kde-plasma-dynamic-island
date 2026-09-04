@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/releases"><img src="https://img.shields.io/github/v/release/manu028-727/kde-plasma-dynamic-island?include_prereleases&sort=semver&style=flat-square&label=release" alt="Latest release"></a>
+  <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/releases"><img src="https://img.shields.io/github/downloads/manu028-727/kde-plasma-dynamic-island/total?style=flat-square" alt="Release downloads"></a>
   <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/stargazers"><img src="https://img.shields.io/github/stars/manu028-727/kde-plasma-dynamic-island?style=flat-square" alt="GitHub stars"></a>
   <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/issues"><img src="https://img.shields.io/github/issues/manu028-727/kde-plasma-dynamic-island?style=flat-square" alt="Open issues"></a>
   <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/commits/main"><img src="https://img.shields.io/github/last-commit/manu028-727/kde-plasma-dynamic-island?style=flat-square" alt="Last commit"></a>
