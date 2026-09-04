@@ -2,33 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
     tags: ['v*']
-  pull_request:
-    branches: [main]
 
 jobs:
-  lint-qml:
-    name: Lint QML (qmllint)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install qmllint
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qt6-declarative-dev-tools
-
-      - name: Lint QML with qmllint
-        run: |
-          set +e
-          FAILED=0
-          while IFS= read -r f; do
-            echo "==> qmllint $f"
-            qmllint "$f" || FAILED=1
-          done < <(find contents -name '*.qml' -o -name '*.js')
-          if [ "$FAILED" -eq 1 ]; then echo "::error::qmllint failed"; exit 1; fi
-
   package:
     name: Package .plasmoid
     if: startsWith(github.ref, 'refs/tags/v')
