@@ -8,6 +8,14 @@
   <img src="https://img.shields.io/badge/License-GPL--3.0--or--later-22c55e?style=for-the-badge" alt="GPL-3.0-or-later license">
 </p>
 
+<p align="center">
+  <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/releases"><img src="https://img.shields.io/github/v/release/manu028-727/kde-plasma-dynamic-island?include_prereleases&sort=semver&style=flat-square&label=release" alt="Latest release"></a>
+  <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/stargazers"><img src="https://img.shields.io/github/stars/manu028-727/kde-plasma-dynamic-island?style=flat-square" alt="GitHub stars"></a>
+  <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/issues"><img src="https://img.shields.io/github/issues/manu028-727/kde-plasma-dynamic-island?style=flat-square" alt="Open issues"></a>
+  <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/commits/main"><img src="https://img.shields.io/github/last-commit/manu028-727/kde-plasma-dynamic-island?style=flat-square" alt="Last commit"></a>
+  <a href="https://doc.qt.io/qt-6/qmlapplications.html"><img src="https://img.shields.io/badge/built%20with-QML-41cd52?style=flat-square&logo=qt&logoColor=white" alt="Built with QML"></a>
+</p>
+
 A KDE Plasma 6 widget inspired by the iOS/macOS Dynamic Island: a compact black pill for live activity plus a dark floating control-center popup.
 
 ## Alpha Warning
