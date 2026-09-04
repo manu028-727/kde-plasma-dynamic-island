@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.notificationmanager as NotificationManager
 import ".."
+import "../activities" as Activities
 
 Item {
     id: notificationsContent
@@ -48,7 +49,7 @@ Item {
                 Layout.fillWidth: true
                 spacing: -1
 
-                QQC2.Label {
+                PlasmaLabel {
                     Layout.fillWidth: true
                     text: "Notifications"
                     color: "#f8f8fb"
@@ -58,7 +59,7 @@ Item {
                     maximumLineCount: 1
                 }
 
-                QQC2.Label {
+                PlasmaLabel {
                     Layout.fillWidth: true
                     text: app.notificationStatusText()
                     color: "#8f9099"
@@ -121,12 +122,12 @@ Item {
                         radius: Math.min(10, width / 2)
                         color: Qt.rgba(1, 1, 1, 0.05)
 
-                        Kirigami.Icon {
-                            anchors.centerIn: parent
-                            width: Math.max(14, parent.width - 8)
-                            height: width
-                            source: app.notificationIcon(modelData)
-                            color: app.notificationAccent(modelData)
+                        Activities.NotificationVisual {
+                            anchors.fill: parent
+                            source: notificationsContent.detailed && app.notificationImagesEnabled ? app.notificationMainImage(modelData) : app.notificationAppIcon(modelData)
+                            fallbackSource: app.notificationMainIcon(modelData)
+                            fallbackColor: app.notificationAccent(modelData)
+                            cornerRadius: Math.min(10, width / 2)
                         }
                     }
 
@@ -138,7 +139,7 @@ Item {
                             Layout.fillWidth: true
                             spacing: 5
 
-                            QQC2.Label {
+                            PlasmaLabel {
                                 Layout.fillWidth: true
                                 text: app.notificationTitle(modelData)
                                 color: "#f4f4f8"
@@ -157,13 +158,15 @@ Item {
                             }
                         }
 
-                        QQC2.Label {
+                        PlasmaLabel {
                             Layout.fillWidth: true
                             text: notificationsContent.detailed && app.notificationBody(modelData).length > 0 ? app.notificationBody(modelData) : app.notificationAppName(modelData)
+                            textFormat: Text.PlainText
                             color: "#9b9ca6"
                             font.pixelSize: 9
+                            wrapMode: Text.Wrap
                             elide: Text.ElideRight
-                            maximumLineCount: 1
+                            maximumLineCount: notificationsContent.detailed ? Math.min(2, app.notificationBodyLines) : 1
                         }
                     }
 
@@ -181,7 +184,7 @@ Item {
             }
         }
 
-        QQC2.Label {
+        PlasmaLabel {
             visible: notificationsContent.notificationTotal <= 0
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -192,7 +195,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
         }
 
-        QQC2.Label {
+        PlasmaLabel {
             visible: notificationsContent.notificationTotal > 0 && notificationsContent.overflowCount > 0
             Layout.fillWidth: true
             text: "+" + notificationsContent.overflowCount + " more"
@@ -221,7 +224,7 @@ Item {
         radius: 8
         color: "#ff453a"
 
-        QQC2.Label {
+        PlasmaLabel {
             id: countLabel
 
             anchors.centerIn: parent

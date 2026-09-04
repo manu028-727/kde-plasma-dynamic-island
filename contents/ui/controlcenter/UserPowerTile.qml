@@ -69,7 +69,7 @@ Item {
         width: userPowerContent.shortTile ? Math.max(1, (powerButton.visible ? powerButton.x - x - 8 : parent.width - x - userPowerContent.pad)) : userPowerContent.compact ? Math.max(1, parent.width - userPowerContent.pad * 2) : Math.max(1, powerButton.x - x - 10)
         spacing: userPowerContent.shortTile ? -1 : 1
 
-        QQC2.Label {
+        PlasmaLabel {
             width: parent.width
             text: app.systemUsername || "User"
             color: "#f8f8fb"
@@ -79,7 +79,7 @@ Item {
             maximumLineCount: 1
         }
 
-        QQC2.Label {
+        PlasmaLabel {
             visible: !userPowerContent.compact || userPowerContent.height >= 34
             width: parent.width
             text: app.systemHostname || "KDE Plasma"
@@ -103,13 +103,13 @@ Item {
 
         QQC2.Menu {
             id: powerMenu
-            QQC2.MenuItem { text: "Lock"; icon.name: "system-lock-screen"; onTriggered: app.runPowerAction("lock") }
-            QQC2.MenuItem { text: "Logout"; icon.name: "system-log-out"; onTriggered: app.runPowerAction("logout") }
-            QQC2.MenuItem { text: "Sleep"; icon.name: "system-suspend"; onTriggered: app.runPowerAction("sleep") }
-            QQC2.MenuItem { text: "Hibernate"; icon.name: "system-suspend-hibernate"; onTriggered: app.runPowerAction("hibernate") }
+            PlasmaMenuItem { text: "Lock"; icon.name: "system-lock-screen"; onTriggered: app.runPowerAction("lock") }
+            PlasmaMenuItem { text: "Logout"; icon.name: "system-log-out"; onTriggered: app.runPowerAction("logout") }
+            PlasmaMenuItem { text: "Sleep"; icon.name: "system-suspend"; onTriggered: app.runPowerAction("sleep") }
+            PlasmaMenuItem { text: "Hibernate"; icon.name: "system-suspend-hibernate"; onTriggered: app.runPowerAction("hibernate") }
             QQC2.MenuSeparator {}
-            QQC2.MenuItem { text: "Reboot"; icon.name: "system-reboot"; onTriggered: app.runPowerAction("reboot") }
-            QQC2.MenuItem { text: "Shutdown"; icon.name: "system-shutdown"; onTriggered: app.runPowerAction("shutdown") }
+            PlasmaMenuItem { text: "Reboot"; icon.name: "system-reboot"; onTriggered: app.runPowerAction("reboot") }
+            PlasmaMenuItem { text: "Shutdown"; icon.name: "system-shutdown"; onTriggered: app.runPowerAction("shutdown") }
         }
     }
 

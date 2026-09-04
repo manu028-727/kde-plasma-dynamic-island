@@ -73,7 +73,7 @@ MouseArea {
             Layout.fillWidth: true
             spacing: simpleTile.detailed ? 4 : 1
 
-            QQC2.Label {
+            PlasmaLabel {
                 Layout.fillWidth: true
                 text: simpleTile.title
                 color: "#f8f8fb"
@@ -83,7 +83,7 @@ MouseArea {
                 maximumLineCount: 1
             }
 
-            QQC2.Label {
+            PlasmaLabel {
                 Layout.fillWidth: true
                 text: simpleTile.subtitle
                 color: "#8f9099"
@@ -92,7 +92,7 @@ MouseArea {
                 maximumLineCount: 1
             }
 
-            QQC2.Label {
+            PlasmaLabel {
                 visible: simpleTile.detailed && simpleTile.detailText.length > 0
                 Layout.fillWidth: true
                 text: simpleTile.detailText
@@ -121,7 +121,7 @@ MouseArea {
                 }
             }
 
-            QQC2.Label {
+            PlasmaLabel {
                 visible: simpleTile.detailed && simpleTile.footerText.length > 0
                 Layout.fillWidth: true
                 text: simpleTile.footerText

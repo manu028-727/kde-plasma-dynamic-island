@@ -13,8 +13,10 @@ import org.kde.plasma.private.batterymonitor
 import org.kde.plasma.private.brightnesscontrolplugin as Brightness
 import org.kde.plasma.private.mpris as Mpris
 import org.kde.plasma.private.volume
+import org.kde.plasma.workspace.keyboardlayout as KeyboardLayout
 import "controlcenter"
 import "controlcenter/ModuleRegistry.js" as ModuleRegistry
+import "activities" as Activities
 
 PlasmoidItem {
     id: root
@@ -29,8 +31,22 @@ PlasmoidItem {
     readonly property bool hasPlayer: player !== null && player !== undefined
     readonly property bool isPlaying: hasPlayer && player.playbackStatus === Mpris.PlaybackStatus.Playing
     readonly property bool hasJobs: notifications.activeJobsCount > 0
-    readonly property bool hasNotifications: notifications.unreadNotificationsCount > 0 || notifications.activeNotificationsCount > 0
-    readonly property bool hasActivity: hasJobs || hasPlayer || hasNotifications
+    readonly property bool hasNotifications: notificationCount() > 0
+    readonly property bool mediaActivityEnabled: Plasmoid.configuration.mediaActivityEnabled !== false
+    readonly property bool notificationActivityEnabled: Plasmoid.configuration.notificationActivityEnabled !== false
+    readonly property bool jobActivityEnabled: Plasmoid.configuration.jobActivityEnabled !== false
+    readonly property bool keyboardLayoutActivityEnabled: Plasmoid.configuration.keyboardLayoutActivityEnabled !== false
+    readonly property bool notificationImagesEnabled: Plasmoid.configuration.notificationShowImages !== false
+    readonly property int notificationBodyCharacters: Math.max(40, Math.min(1000, Math.round(finiteNumber(Plasmoid.configuration.notificationBodyCharacterLimit, 240))))
+    readonly property int notificationBodyLines: Math.max(1, Math.min(6, Math.round(finiteNumber(Plasmoid.configuration.notificationBodyLineLimit, 3))))
+    readonly property int notificationPopupDurationMs: Math.max(2000, Math.min(15000, Math.round(finiteNumber(Plasmoid.configuration.notificationPopupDurationSeconds, 4)) * 1000))
+    readonly property int ongoingPopupDurationMs: Math.max(2000, Math.min(15000, Math.round(finiteNumber(Plasmoid.configuration.ongoingPopupDurationSeconds, 3)) * 1000))
+    readonly property var keyboardLayoutNames: keyboardLayout.layoutsList.length > keyboardLayout.layout ? keyboardLayout.layoutsList[keyboardLayout.layout] : null
+    readonly property string keyboardLayoutShortName: keyboardLayoutNames ? keyboardLayoutNames.shortName || "" : ""
+    readonly property string keyboardLayoutDisplayName: keyboardLayoutNames ? keyboardLayoutNames.displayName || keyboardLayoutShortName : keyboardLayoutShortName
+    readonly property string keyboardLayoutLongName: keyboardLayoutNames ? keyboardLayoutNames.longName || keyboardLayoutDisplayName : keyboardLayoutDisplayName
+    readonly property int notificationUnreadCount: notifications.unreadNotificationsCount
+    readonly property bool hasActivity: keyboardAnnouncementActive || jobActivityEnabled && hasJobs || mediaActivityEnabled && hasPlayer || notificationActivityEnabled && hasNotifications
     readonly property int panelSlot: inPanel && parent ? Math.max(24, Math.min(36, (verticalPanel ? parent.width : parent.height) - 6)) : 30
     readonly property int islandHeight: Math.max(24, Math.min(36, panelSlot))
     readonly property int idleIslandWidth: Math.round(islandHeight * 2.7)
@@ -48,6 +64,8 @@ PlasmoidItem {
     property bool islandOpen: false
     property bool panelHidden: false
     property bool popupAcceptsFocus: false
+    property real popupCollapsedX: (popupWidth - realIslandWidth) / 2
+    property real popupCollapsedY: islandExpandsUp ? popupHeight - realIslandHeight : islandExpandsDown ? 0 : (popupHeight - realIslandHeight) / 2
     property bool controlEditMode: false
     property int controlLayoutRevision: 0
     property var controlLayoutDraft: []
@@ -66,6 +84,8 @@ PlasmoidItem {
     property string activityPopupMode: "auto"
     property int clickButton: Qt.NoButton
     property int mediaPlayerRevision: 0
+    property int notificationRevision: 0
+    property bool keyboardAnnouncementActive: false
     property int lastUnreadNotificationsCount: 0
     property int lastActiveJobsCount: 0
     property string screenBrightnessDisplayName: ""
@@ -106,19 +126,58 @@ PlasmoidItem {
 
     readonly property var controlModules: ModuleRegistry.allModules()
 
+    function screenForPoint(pointX, pointY) {
+        const screens = Application.screens;
+        let nearestScreen = null;
+        let nearestDistance = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < screens.length; ++i) {
+            const screen = screens[i];
+            const left = finiteNumber(screen.virtualX, 0);
+            const top = finiteNumber(screen.virtualY, 0);
+            const width = Math.max(0, finiteNumber(screen.width, 0));
+            const height = Math.max(0, finiteNumber(screen.height, 0));
+            if (width <= 0 || height <= 0)
+                continue;
+
+            const right = left + width;
+            const bottom = top + height;
+            const dx = pointX < left ? left - pointX : pointX > right ? pointX - right : 0;
+            const dy = pointY < top ? top - pointY : pointY > bottom ? pointY - bottom : 0;
+            const distance = dx * dx + dy * dy;
+            if (distance < nearestDistance) {
+                nearestScreen = screen;
+                nearestDistance = distance;
+            }
+        }
+
+        return nearestScreen;
+    }
+
     function positionIslandDialog() {
         const item = root.compactRepresentationItem || root;
         if (!item || !item.mapToGlobal)
             return ;
 
         const pos = item.mapToGlobal(0, 0);
-        islandDialog.x = Math.round(pos.x + item.width / 2 - popupWidth / 2);
+        const collapsedX = pos.x + item.width / 2 - realIslandWidth / 2;
+        const collapsedY = pos.y + item.height / 2 - realIslandHeight / 2;
+        let dialogX = collapsedX - (popupWidth - realIslandWidth) / 2;
+        let dialogY = collapsedY - (popupHeight - realIslandHeight) / 2;
         if (Plasmoid.location === PlasmaCore.Types.BottomEdge)
-            islandDialog.y = Math.round(pos.y + item.height / 2 + realIslandHeight / 2 - popupHeight);
+            dialogY = collapsedY - (popupHeight - realIslandHeight);
         else if (Plasmoid.location === PlasmaCore.Types.TopEdge)
-            islandDialog.y = Math.round(pos.y + item.height / 2 - realIslandHeight / 2);
-        else
-            islandDialog.y = Math.round(pos.y + item.height / 2 - popupHeight / 2);
+            dialogY = collapsedY;
+
+        const popupScreen = screenForPoint(collapsedX + realIslandWidth / 2, collapsedY + realIslandHeight / 2);
+        if (popupScreen) {
+            dialogX = clampNumber(dialogX, popupScreen.virtualX, popupScreen.virtualX + popupScreen.width - popupWidth);
+            dialogY = clampNumber(dialogY, popupScreen.virtualY, popupScreen.virtualY + popupScreen.height - popupHeight);
+        }
+
+        islandDialog.x = Math.round(dialogX);
+        islandDialog.y = Math.round(dialogY);
+        popupCollapsedX = collapsedX - islandDialog.x;
+        popupCollapsedY = collapsedY - islandDialog.y;
     }
 
     function openIsland(mode, autoClose) {
@@ -163,6 +222,9 @@ PlasmoidItem {
     }
 
     function bump(kind) {
+        const requestedProvider = kind && kind !== "auto" ? activityController.providerByKey(kind) : null;
+        if (requestedProvider && !requestedProvider.active)
+            return ;
         if (!hasActivity)
             return ;
 
@@ -180,6 +242,8 @@ PlasmoidItem {
     }
 
     function showControlCenter() {
+        keyboardAnnouncementLifetimeTimer.stop();
+        keyboardAnnouncementActive = false;
         root.refreshSystemState();
         root.ensureControlLayout();
         openIsland("control", false);
@@ -202,6 +266,7 @@ PlasmoidItem {
     }
 
     function rowValue(row, role, fallbackValue) {
+        notificationRevision;
         if (row < 0 || notifications.count <= row)
             return fallbackValue;
 
@@ -252,25 +317,62 @@ PlasmoidItem {
     }
 
     function notificationBody(row) {
-        return cleanText(rowValue(row, NotificationManager.Notifications.BodyRole, ""));
+        const body = notificationPlainText(rowValue(row, NotificationManager.Notifications.BodyRole, ""));
+        if (body.length <= notificationBodyCharacters)
+            return body;
+        return body.slice(0, Math.max(1, notificationBodyCharacters - 1)).trimEnd() + "…";
     }
 
-    function notificationIcon(row) {
-        const image = rowValue(row, NotificationManager.Notifications.ImageRole, "");
-        if (typeof image === "string" && image.length > 0)
-            return image;
+    function notificationAppIcon(row) {
+        const applicationIcon = rowValue(row, NotificationManager.Notifications.ApplicationIconNameRole, "");
+        if (hasVisualValue(applicationIcon))
+            return applicationIcon;
 
         const desktopEntry = cleanText(rowValue(row, NotificationManager.Notifications.DesktopEntryRole, ""));
         return desktopEntry.length > 0 ? desktopEntry : "notifications";
     }
 
+    function notificationMainIcon(row) {
+        const icon = rowValue(row, NotificationManager.Notifications.IconNameRole, "");
+        return hasVisualValue(icon) ? icon : notificationAppIcon(row);
+    }
+
+    function notificationMainImage(row) {
+        const image = rowValue(row, NotificationManager.Notifications.ImageRole, null);
+        if (hasVisualValue(image))
+            return image;
+
+        const urls = rowValue(row, NotificationManager.Notifications.UrlsRole, []);
+        if (!urls || urls.length === undefined)
+            return null;
+        for (let i = 0; i < urls.length; ++i) {
+            const candidate = String(urls[i] || "");
+            const path = candidate.split(/[?#]/)[0].toLowerCase();
+            if (/\.(avif|bmp|gif|heic|heif|jpe?g|png|svgz?|webp)$/.test(path))
+                return urls[i];
+        }
+        return null;
+    }
+
+    function notificationHasMainImage(row) {
+        return hasVisualValue(notificationMainImage(row));
+    }
+
+    function notificationIcon(row) {
+        return notificationMainIcon(row);
+    }
+
     function notificationAccent(row) {
-        const urgency = rowValue(row, NotificationManager.Notifications.UrgencyRole, 1);
+        const urgency = notificationUrgency(row);
         if (urgency >= 2)
             return "#ff453a";
         if (urgency <= 0)
             return "#8f9099";
         return "#ff9f0a";
+    }
+
+    function notificationUrgency(row) {
+        return finiteNumber(rowValue(row, NotificationManager.Notifications.UrgencyRole, 1), 1);
     }
 
     function notificationLatestRow() {
@@ -293,6 +395,10 @@ PlasmoidItem {
 
     function openNotification(row) {
         if (row < 0 || notifications.count <= row)
+            return ;
+
+        if (rowValue(row, NotificationManager.Notifications.ExpiredRole, false)
+                || !rowValue(row, NotificationManager.Notifications.HasDefaultActionRole, false))
             return ;
 
         const idx = notifications.index(row, 0);
@@ -328,6 +434,31 @@ PlasmoidItem {
 
     function cleanText(text) {
         return String(text || "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+    }
+
+    function notificationPlainText(text) {
+        return String(text || "")
+            .replace(/<br\s*\/?\s*>/gi, "\n")
+            .replace(/<\/(p|div|li)\s*>/gi, "\n")
+            .replace(/<li(?:\s[^>]*)?>/gi, "• ")
+            .replace(/<[^>]*>/g, "")
+            .replace(/&nbsp;/gi, " ")
+            .replace(/&amp;/gi, "&")
+            .replace(/&lt;/gi, "<")
+            .replace(/&gt;/gi, ">")
+            .replace(/&quot;/gi, "\"")
+            .replace(/&#39;|&apos;/gi, "'")
+            .replace(/\r\n?/g, "\n")
+            .replace(/[\t\f\v ]+/g, " ")
+            .replace(/ *\n */g, "\n")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+    }
+
+    function hasVisualValue(value) {
+        if (value === undefined || value === null)
+            return false;
+        return typeof value !== "string" || value.trim().length > 0;
     }
 
     function finiteNumber(value, fallbackValue) {
@@ -483,19 +614,130 @@ PlasmoidItem {
             current.Next();
     }
 
+    function formatMediaTime(value) {
+        const seconds = Math.max(0, Math.floor(finiteNumber(value, 0) / 1000000));
+        const minutes = Math.floor(seconds / 60);
+        const remainder = seconds % 60;
+        return minutes + ":" + (remainder < 10 ? "0" : "") + remainder;
+    }
+
+    function formatMediaProgress(position, length) {
+        return formatMediaTime(position) + " / " + formatMediaTime(length);
+    }
+
+    function activeJobRow() {
+        return firstRowOfType(NotificationManager.Notifications.JobType);
+    }
+
+    function jobDetails(row) {
+        return rowValue(row, NotificationManager.Notifications.JobDetailsRole, null);
+    }
+
+    function jobTitle(row) {
+        const details = jobDetails(row);
+        const title = cleanText(details && details.summary ? details.summary : rowValue(row, NotificationManager.Notifications.SummaryRole, ""));
+        return title.length > 0 ? title : "Working";
+    }
+
+    function jobText(row) {
+        const details = jobDetails(row);
+        const text = cleanText(details && details.text ? details.text : rowValue(row, NotificationManager.Notifications.BodyRole, ""));
+        if (text.length > 0)
+            return text;
+        const appName = cleanText(details && details.applicationName ? details.applicationName : rowValue(row, NotificationManager.Notifications.ApplicationNameRole, ""));
+        return appName;
+    }
+
+    function jobIcon(row) {
+        const details = jobDetails(row);
+        const icon = details && details.applicationIconName ? details.applicationIconName : rowValue(row, NotificationManager.Notifications.ApplicationIconNameRole, "");
+        if (hasVisualValue(icon))
+            return icon;
+        const desktopEntry = cleanText(details && details.desktopEntry ? details.desktopEntry : rowValue(row, NotificationManager.Notifications.DesktopEntryRole, ""));
+        return desktopEntry.length > 0 ? desktopEntry : "folder-download";
+    }
+
+    function jobState(row) {
+        const details = jobDetails(row);
+        if (details && details.state !== undefined)
+            return details.state;
+        return rowValue(row, NotificationManager.Notifications.JobStateRole, NotificationManager.Notifications.JobStateRunning);
+    }
+
+    function jobPercentage(row) {
+        const details = jobDetails(row);
+        const percentage = details && details.percentage !== undefined ? details.percentage : rowValue(row, NotificationManager.Notifications.PercentageRole, -1);
+        return Math.max(-1, Math.min(100, Math.round(finiteNumber(percentage, -1))));
+    }
+
+    function jobSuspendable(row) {
+        const details = jobDetails(row);
+        return details && details.suspendable !== undefined ? details.suspendable : Boolean(rowValue(row, NotificationManager.Notifications.SuspendableRole, false));
+    }
+
+    function jobKillable(row) {
+        const details = jobDetails(row);
+        return details && details.killable !== undefined ? details.killable : Boolean(rowValue(row, NotificationManager.Notifications.KillableRole, false));
+    }
+
+    function jobIsSuspended(row) {
+        return jobState(row) === NotificationManager.Notifications.JobStateSuspended;
+    }
+
+    function toggleJobSuspended(row) {
+        if (row < 0 || row >= notifications.count || !jobSuspendable(row))
+            return ;
+        const idx = notifications.index(row, 0);
+        if (jobIsSuspended(row))
+            notifications.resumeJob(idx);
+        else
+            notifications.suspendJob(idx);
+    }
+
+    function cancelJob(row) {
+        if (row < 0 || row >= notifications.count || !jobKillable(row))
+            return ;
+        notifications.killJob(notifications.index(row, 0));
+    }
+
+    function formatByteSize(bytes) {
+        let value = Math.max(0, finiteNumber(bytes, 0));
+        const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+        let unit = 0;
+        while (value >= 1024 && unit < units.length - 1) {
+            value /= 1024;
+            unit++;
+        }
+        const decimals = unit === 0 || value >= 100 ? 0 : value >= 10 ? 1 : 2;
+        return value.toFixed(decimals) + " " + units[unit];
+    }
+
+    function jobDetailsText(row) {
+        const details = jobDetails(row);
+        if (!details)
+            return jobIsSuspended(row) ? "Paused" : "";
+        if (jobIsSuspended(row))
+            return "Paused";
+        if (finiteNumber(details.speed, 0) > 0)
+            return formatByteSize(details.speed) + "/s";
+        const processed = finiteNumber(details.processedBytes, 0);
+        const total = finiteNumber(details.totalBytes, 0);
+        if (total > 0)
+            return formatByteSize(processed) + " of " + formatByteSize(total);
+        return cleanText(details.applicationName || "");
+    }
+
+    function announceKeyboardLayout() {
+        if (!keyboardLayoutActivityEnabled)
+            return ;
+        keyboardAnnouncementActive = true;
+        keyboardAnnouncementLifetimeTimer.restart();
+        bump("keyboard");
+    }
+
     function primaryTextFor(kind) {
-        const mode = resolvedActivityMode(kind || "auto");
-        const row = activeRowFor(mode);
-        if (mode === "job" && hasJobs)
-            return cleanText(rowValue(row, NotificationManager.Notifications.SummaryRole, "Working"));
-
-        if (mode === "notice" && hasNotifications)
-            return cleanText(rowValue(row, NotificationManager.Notifications.SummaryRole, "Notification"));
-
-        if (mode === "media" && hasPlayer)
-            return player.track || player.identity || "Media";
-
-        return "Control Center";
+        const provider = activityController.providerFor(kind || "auto");
+        return provider && provider.title.length > 0 ? provider.title : "Control Center";
     }
 
     function primaryText() {
@@ -503,18 +745,8 @@ PlasmoidItem {
     }
 
     function secondaryTextFor(kind) {
-        const mode = resolvedActivityMode(kind || "auto");
-        const row = activeRowFor(mode);
-        if (mode === "job" && hasJobs)
-            return notifications.jobsPercentage >= 0 ? notifications.jobsPercentage + "%" : cleanText(rowValue(row, NotificationManager.Notifications.BodyRole, ""));
-
-        if (mode === "notice" && hasNotifications)
-            return cleanText(rowValue(row, NotificationManager.Notifications.BodyRole, ""));
-
-        if (mode === "media" && hasPlayer)
-            return player.artist || player.album || player.identity || "";
-
-        return "Brightness, audio, network, power";
+        const provider = activityController.providerFor(kind || "auto");
+        return provider ? provider.subtitle : "Brightness, audio, network, power";
     }
 
     function secondaryText() {
@@ -522,39 +754,15 @@ PlasmoidItem {
     }
 
     function resolvedActivityMode(kind) {
-        if (kind === "job" && hasJobs)
-            return "job";
-
-        if (kind === "notice" && hasNotifications)
-            return "notice";
-
-        if (kind === "media" && hasPlayer)
-            return "media";
-
-        return activityMode();
+        return activityController.keyFor(kind || "auto");
     }
 
     function activityPriority(kind) {
-        if (kind === "job")
-            return 3;
-        if (kind === "notice")
-            return 2;
-        if (kind === "media")
-            return 1;
-        return 0;
+        return activityController.priorityFor(kind || "auto");
     }
 
     function activityMode() {
-        if (hasJobs)
-            return "job";
-
-        if (hasPlayer)
-            return "media";
-
-        if (hasNotifications)
-            return "notice";
-
-        return "idle";
+        return activityController.currentKey;
     }
 
     function popupActivityMode() {
@@ -562,28 +770,33 @@ PlasmoidItem {
     }
 
     function activityArtworkFor(kind) {
-        return resolvedActivityMode(kind || "auto") === "media" && hasPlayer ? player.artUrl : "";
+        const provider = activityController.providerFor(kind || "auto");
+        return provider ? provider.artwork : null;
     }
 
     function activityProgressVisible(kind) {
-        const mode = resolvedActivityMode(kind || "auto");
-        return mode === "job" && hasJobs || mode === "media" && hasPlayer && player.length > 0;
+        const provider = activityController.providerFor(kind || "auto");
+        return provider ? provider.progressVisible : false;
     }
 
     function activityProgressTo(kind) {
-        return resolvedActivityMode(kind || "auto") === "job" ? 100 : Math.max(1, player ? player.length : 1);
+        const provider = activityController.providerFor(kind || "auto");
+        return provider ? provider.progressTo : 1;
     }
 
     function activityProgressValue(kind) {
-        return resolvedActivityMode(kind || "auto") === "job" ? Math.max(0, notifications.jobsPercentage) : player ? player.position : 0;
+        const provider = activityController.providerFor(kind || "auto");
+        return provider ? provider.progressValue : 0;
     }
 
     function activityProgressAccent(kind) {
-        return resolvedActivityMode(kind || "auto") === "job" ? "#42d77d" : "#5ac8fa";
+        const provider = activityController.providerFor(kind || "auto");
+        return provider ? provider.progressAccent : "#5ac8fa";
     }
 
     function activityShowsMediaControls(kind) {
-        return resolvedActivityMode(kind || "auto") === "media" && hasPlayer;
+        const provider = activityController.providerFor(kind || "auto");
+        return provider ? provider.mediaControlsVisible : false;
     }
 
     function screenBrightnessPercent() {
@@ -1497,11 +1710,98 @@ PlasmoidItem {
         limit: 8
         showNotifications: true
         showJobs: true
-        showExpired: false
-        showDismissed: false
+        // Keep Plasma popup history visible in Dynamic Island after the system
+        // popup times out or is hidden. Closing it here still calls close().
+        showExpired: true
+        showDismissed: true
         sortMode: NotificationManager.Notifications.SortByTypeAndUrgency
         sortOrder: Qt.DescendingOrder
         groupMode: NotificationManager.Notifications.GroupDisabled
+    }
+
+    KeyboardLayout.KeyboardLayout {
+        id: keyboardLayout
+
+        property bool announcementReady: false
+
+        Component.onCompleted: Qt.callLater(function() {
+            keyboardLayout.announcementReady = true;
+        })
+        onLayoutChanged: {
+            if (announcementReady)
+                root.announceKeyboardLayout();
+        }
+    }
+
+    Activities.ActivityController {
+        id: activityController
+
+        providers: [
+            Activities.ActivityProvider {
+                key: "keyboard"
+                active: root.keyboardAnnouncementActive
+                priority: 350
+                title: root.keyboardLayoutLongName
+                subtitle: root.keyboardLayoutDisplayName
+                autoCloseMs: root.ongoingPopupDurationMs
+                visualComponent: keyboardVisualComponent
+                expandedComponent: keyboardExpandedComponent
+            },
+            Activities.ActivityProvider {
+                key: "job"
+                active: root.jobActivityEnabled && root.hasJobs
+                priority: 300
+                title: root.jobTitle(root.activeJobRow())
+                subtitle: root.jobText(root.activeJobRow())
+                progressVisible: root.jobPercentage(root.activeJobRow()) >= 0
+                progressTo: 100
+                progressValue: Math.max(0, root.jobPercentage(root.activeJobRow()))
+                progressAccent: "#42d77d"
+                autoCloseMs: root.ongoingPopupDurationMs
+                visualComponent: jobVisualComponent
+                compactComponent: jobCompactComponent
+                expandedComponent: jobExpandedComponent
+            },
+            Activities.ActivityProvider {
+                key: "notice"
+                active: root.notificationActivityEnabled && root.hasNotifications
+                priority: root.notificationUrgency(root.notificationLatestRow()) >= 2 ? 400 : 200
+                title: root.notificationTitle(root.notificationLatestRow())
+                subtitle: root.notificationBody(root.notificationLatestRow())
+                artwork: root.notificationMainImage(root.notificationLatestRow())
+                autoCloseMs: root.notificationPopupDurationMs
+                visualComponent: noticeVisualComponent
+                compactComponent: notificationCompactComponent
+                expandedComponent: notificationActivityPage
+            },
+            Activities.ActivityProvider {
+                key: "media"
+                active: root.mediaActivityEnabled && root.hasPlayer
+                priority: 100
+                title: root.hasPlayer ? root.player.track || root.player.identity || "Media" : "Media"
+                subtitle: root.hasPlayer ? root.player.artist || root.player.album || root.player.identity || "" : ""
+                artwork: root.hasPlayer ? root.player.artUrl : ""
+                progressVisible: root.hasPlayer && root.player.length > 0
+                progressTo: Math.max(1, root.hasPlayer ? root.player.length : 1)
+                progressValue: root.hasPlayer ? root.player.position : 0
+                progressAccent: "#5ac8fa"
+                mediaControlsVisible: root.hasPlayer
+                autoCloseMs: root.ongoingPopupDurationMs
+                visualComponent: mediaVisualComponent
+                compactComponent: musicCompactComponent
+                expandedComponent: musicExpandedComponent
+            },
+            Activities.ActivityProvider {
+                key: "idle"
+                active: true
+                priority: 0
+                title: "Control Center"
+                subtitle: "Brightness, audio, network, power"
+                autoCloseMs: root.ongoingPopupDurationMs
+                visualComponent: idleVisualComponent
+                expandedComponent: activityPage
+            }
+        ]
     }
 
     Mpris.Mpris2Model {
@@ -1676,6 +1976,7 @@ PlasmoidItem {
 
     Connections {
         function onRowsInserted(parent, first, last) {
+            root.notificationRevision++;
             let hasInsertedNotice = false;
             let hasInsertedJob = false;
             for (let row = first; row <= last; ++row) {
@@ -1689,6 +1990,18 @@ PlasmoidItem {
                 root.bump("job");
             else if (hasInsertedNotice)
                 root.bump("notice");
+        }
+
+        function onRowsRemoved(parent, first, last) {
+            root.notificationRevision++;
+        }
+
+        function onDataChanged(topLeft, bottomRight, roles) {
+            root.notificationRevision++;
+        }
+
+        function onModelReset() {
+            root.notificationRevision++;
         }
 
         function onActiveJobsCountChanged() {
@@ -1711,13 +2024,21 @@ PlasmoidItem {
     Timer {
         id: activityPopupTimer
 
-        interval: 3000
+        interval: activityController.autoCloseMsFor(root.activityPopupMode)
         repeat: false
         onTriggered: {
             if (root.popupMode === "activity")
                 root.closeIsland();
 
         }
+    }
+
+    Timer {
+        id: keyboardAnnouncementLifetimeTimer
+
+        interval: root.ongoingPopupDurationMs + 420
+        repeat: false
+        onTriggered: root.keyboardAnnouncementActive = false
     }
 
     Timer {
@@ -1729,6 +2050,10 @@ PlasmoidItem {
             if (!root.islandOpen) {
                 root.dialogVisible = false;
                 root.panelHidden = false;
+                if (root.keyboardAnnouncementActive) {
+                    keyboardAnnouncementLifetimeTimer.stop();
+                    root.keyboardAnnouncementActive = false;
+                }
             }
         }
     }
@@ -1874,6 +2199,120 @@ PlasmoidItem {
     }
 
     Component {
+        id: idleVisualComponent
+
+        MaskedArtwork {
+            mode: "idle"
+        }
+    }
+
+    Component {
+        id: mediaVisualComponent
+
+        MaskedArtwork {
+            artworkSource: root.hasPlayer ? root.player.artUrl : ""
+            mode: "media"
+            progress: root.activityProgressValue("media") / Math.max(1, root.activityProgressTo("media"))
+            playing: root.isPlaying
+        }
+    }
+
+    Component {
+        id: jobVisualComponent
+
+        MaskedArtwork {
+            mode: "job"
+            progress: root.activityProgressValue("job") / Math.max(1, root.activityProgressTo("job"))
+            playing: !root.jobIsSuspended(root.activeJobRow())
+        }
+    }
+
+    Component {
+        id: keyboardVisualComponent
+
+        Rectangle {
+            radius: Math.min(width, height) / 2
+            color: "#1b1b25"
+            border.color: "#3d3d50"
+            border.width: 1
+
+            PlasmaLabel {
+                anchors.centerIn: parent
+                text: root.keyboardLayoutShortName.toUpperCase()
+                color: "#e2e2ed"
+                font.pixelSize: Math.max(8, Math.min(11, parent.height * 0.42))
+                font.weight: Font.Bold
+            }
+        }
+    }
+
+    Component {
+        id: noticeVisualComponent
+
+        Activities.NotificationVisual {
+            source: root.notificationAppIcon(root.notificationLatestRow())
+            fallbackSource: "notifications"
+            fallbackColor: root.notificationAccent(root.notificationLatestRow())
+        }
+    }
+
+    Component {
+        id: notificationActivityPage
+
+        Activities.NotificationExpanded {
+            app: root
+        }
+    }
+
+    Component {
+        id: musicCompactComponent
+
+        Activities.MusicCompact {
+            app: root
+        }
+    }
+
+    Component {
+        id: musicExpandedComponent
+
+        Activities.MusicExpanded {
+            app: root
+        }
+    }
+
+    Component {
+        id: notificationCompactComponent
+
+        Activities.NotificationCompact {
+            app: root
+        }
+    }
+
+    Component {
+        id: jobCompactComponent
+
+        Activities.JobCompact {
+            app: root
+        }
+    }
+
+    Component {
+        id: jobExpandedComponent
+
+        Activities.JobExpanded {
+            app: root
+        }
+    }
+
+    Component {
+        id: keyboardExpandedComponent
+
+        Activities.KeyboardLayoutExpanded {
+            app: root
+        }
+    }
+
+    Component {
         id: islandComponent
 
         Item {
@@ -1941,13 +2380,9 @@ PlasmoidItem {
                     Layout.preferredHeight: root.compactArtworkSize
                     color: "transparent"
 
-                    MaskedArtwork {
+                    Loader {
                         anchors.fill: parent
-                        artworkSource: root.hasPlayer ? root.player.artUrl : ""
-                        cornerRadius: height / 2
-                        mode: root.activityMode()
-                        progress: Math.max(0, notifications.jobsPercentage) / 100
-                        playing: root.isPlaying
+                        sourceComponent: activityController.visualComponentFor(root.activityMode())
                     }
 
                 }
@@ -1960,7 +2395,7 @@ PlasmoidItem {
                     Loader {
                         anchors.fill: parent
                         active: root.hasActivity
-                        sourceComponent: root.hasJobs ? compactJobIndicator : root.hasPlayer ? compactMediaIndicator : compactNoticeIndicator
+                        sourceComponent: activityController.compactComponentFor(root.activityMode())
                     }
 
                 }
@@ -1994,133 +2429,6 @@ PlasmoidItem {
     }
 
     Component {
-        id: compactMediaIndicator
-
-        Item {
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 5
-                anchors.rightMargin: 1
-                spacing: 4
-
-                ProgressBar {
-                    Layout.preferredWidth: Math.max(48, Math.min(76, root.islandWidth * 0.42))
-                    Layout.maximumWidth: Math.max(48, Math.min(76, root.islandWidth * 0.42))
-                    Layout.preferredHeight: 4
-                    visible: root.hasPlayer && root.player.length > 0
-                    from: 0
-                    to: Math.max(1, root.player ? root.player.length : 1)
-                    value: root.player ? root.player.position : 0
-                    accent: "#5ac8fa"
-                }
-
-                Row {
-                    Layout.preferredWidth: 27
-                    Layout.preferredHeight: Math.max(14, root.islandHeight - 14)
-                    Layout.alignment: Qt.AlignVCenter
-                    spacing: 3
-
-                    Repeater {
-                        model: [0.45, 0.86, 0.58, 0.74, 0.36]
-
-                        Rectangle {
-                            property real barLevel: modelData
-
-                            width: 3
-                            height: Math.max(4, parent.height * barLevel)
-                            anchors.verticalCenter: parent.verticalCenter
-                            radius: 2
-                            color: "#c026d3"
-                            opacity: root.isPlaying ? 1 : 0.48
-
-                            SequentialAnimation on barLevel {
-                                running: root.isPlaying
-                                loops: Animation.Infinite
-
-                                PauseAnimation {
-                                    duration: index * 55
-                                }
-
-                                NumberAnimation {
-                                    to: Math.max(0.28, 1 - modelData * 0.35)
-                                    duration: 210 + index * 20
-                                    easing.type: Easing.InOutSine
-                                }
-
-                                NumberAnimation {
-                                    to: modelData
-                                    duration: 240 + index * 25
-                                    easing.type: Easing.InOutSine
-                                }
-
-                            }
-
-                        }
-
-                    }
-
-                }
-
-            }
-
-        }
-
-    }
-
-    Component {
-        id: compactJobIndicator
-
-        RowLayout {
-            spacing: 6
-
-            QQC2.Label {
-                text: notifications.jobsPercentage >= 0 ? notifications.jobsPercentage + "%" : ""
-                visible: text.length > 0
-                color: "#c7f9d4"
-                font.pixelSize: 9
-                font.weight: Font.Bold
-            }
-
-            ProgressBar {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 5
-                from: 0
-                to: 100
-                value: Math.max(0, notifications.jobsPercentage)
-                accent: "#42d77d"
-            }
-
-        }
-
-    }
-
-    Component {
-        id: compactNoticeIndicator
-
-        RowLayout {
-            spacing: 5
-
-            Rectangle {
-                Layout.preferredWidth: 6
-                Layout.preferredHeight: 6
-                radius: 3
-                color: "#ff9f0a"
-            }
-
-            QQC2.Label {
-                Layout.fillWidth: true
-                text: notifications.unreadNotificationsCount > 0 ? notifications.unreadNotificationsCount + "" : "!"
-                color: "#ffd7a1"
-                font.pixelSize: 10
-                font.weight: Font.Bold
-                horizontalAlignment: Text.AlignRight
-            }
-
-        }
-
-    }
-
-    Component {
         id: popupComponent
 
         MouseArea {
@@ -2134,8 +2442,8 @@ PlasmoidItem {
             readonly property real panelWidth: collapsedWidth + (root.popupWidth - collapsedWidth) * morph
             readonly property real panelHeight: collapsedHeight + (root.popupHeight - collapsedHeight) * morph
             readonly property real panelRadius: collapsedHeight / 2 + (root.popupRadius - collapsedHeight / 2) * morph
-            readonly property real collapsedY: root.islandExpandsUp ? root.popupHeight - collapsedHeight : root.islandExpandsDown ? 0 : (root.popupHeight - collapsedHeight) / 2
-            readonly property real panelY: collapsedY * (1 - morph)
+            readonly property real panelX: root.popupCollapsedX * (1 - morph)
+            readonly property real panelY: root.popupCollapsedY * (1 - morph)
 
             implicitWidth: root.popupWidth
             implicitHeight: root.popupHeight
@@ -2181,7 +2489,7 @@ PlasmoidItem {
             Rectangle {
                 id: popupShadow
 
-                x: (parent.width - width) / 2
+                x: popupRoot.panelX
                 y: popupRoot.panelY
                 width: popupRoot.panelWidth
                 height: popupRoot.panelHeight
@@ -2219,7 +2527,7 @@ PlasmoidItem {
                     anchors.margins: root.popupMode === "control" ? 14 : 12
                     opacity: popupRoot.contentOpacity
                     visible: opacity > 0
-                    sourceComponent: root.popupMode === "control" ? controlCenterPage : activityPage
+                    sourceComponent: root.popupMode === "control" ? controlCenterPage : activityController.expandedComponentFor(root.popupActivityMode())
                 }
 
                 RowLayout {
@@ -2237,13 +2545,9 @@ PlasmoidItem {
                         Layout.preferredHeight: root.compactArtworkSize
                         color: "transparent"
 
-                        MaskedArtwork {
+                        Loader {
                             anchors.fill: parent
-                            artworkSource: root.activityArtworkFor(root.popupActivityMode())
-                            cornerRadius: Math.min(height / 2, 8 + (height / 2 - 8) * (1 - Math.min(1, popupRoot.morph / 0.34)))
-                            mode: root.popupActivityMode()
-                            progress: root.activityProgressValue(root.popupActivityMode()) / Math.max(1, root.activityProgressTo(root.popupActivityMode()))
-                            playing: root.popupActivityMode() === "media" ? root.isPlaying : root.popupActivityMode() === "job"
+                            sourceComponent: activityController.visualComponentFor(root.popupActivityMode())
                         }
 
                     }
@@ -2256,7 +2560,7 @@ PlasmoidItem {
                         Loader {
                             anchors.fill: parent
                             active: root.hasActivity
-                            sourceComponent: root.popupActivityMode() === "job" ? compactJobIndicator : root.popupActivityMode() === "media" ? compactMediaIndicator : compactNoticeIndicator
+                            sourceComponent: activityController.compactComponentFor(root.popupActivityMode())
                         }
 
                     }
@@ -2315,7 +2619,7 @@ PlasmoidItem {
                 Layout.fillWidth: true
                 spacing: 5
 
-                QQC2.Label {
+                PlasmaLabel {
                     Layout.fillWidth: true
                     text: root.primaryTextFor(root.popupActivityMode())
                     color: "#ffffff"
@@ -2325,7 +2629,7 @@ PlasmoidItem {
                     maximumLineCount: 1
                 }
 
-                QQC2.Label {
+                PlasmaLabel {
                     Layout.fillWidth: true
                     text: root.secondaryTextFor(root.popupActivityMode())
                     color: "#9d9da7"
@@ -2544,7 +2848,7 @@ PlasmoidItem {
                 color: chip.dotColor
             }
 
-            QQC2.Label {
+            PlasmaLabel {
                 Layout.fillWidth: true
                 text: chip.label
                 color: "#f4f4f8"

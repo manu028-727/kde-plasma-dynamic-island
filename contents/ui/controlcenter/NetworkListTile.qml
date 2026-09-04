@@ -54,7 +54,7 @@ MouseArea {
                 source: app.networkTitle() === "Wired" ? "network-wired-activated" : connectionsSource.wirelessEnabled ? "network-wireless-on" : "network-wireless-off"
                 color: connectionsSource.networkingEnabled ? "#5ac8fa" : "#8f9099"
             }
-            QQC2.Label {
+            PlasmaLabel {
                 Layout.fillWidth: true
                 text: app.networkTitle()
                 color: "#f8f8fb"
@@ -62,7 +62,7 @@ MouseArea {
                 font.weight: Font.Bold
                 elide: Text.ElideRight
             }
-            QQC2.Label {
+            PlasmaLabel {
                 visible: networkList.width >= 156
                 text: app.wifiSignalPercent() > 0 ? app.wifiSignalPercent() + "%" : ""
                 color: "#8f9099"
@@ -89,7 +89,7 @@ MouseArea {
 
         Repeater {
             model: networkList.visibleRows
-            QQC2.Label {
+            PlasmaLabel {
                 Layout.fillWidth: true
                 text: modelData
                 color: String(modelData).indexOf("* ") === 0 || String(modelData).indexOf("• ") === 0 ? "#f8f8fb" : "#9b9ca6"

@@ -59,7 +59,7 @@ MouseArea {
                 Layout.fillWidth: true
                 spacing: -1
 
-                QQC2.Label {
+                PlasmaLabel {
                     Layout.fillWidth: true
                     text: "KDE Connect"
                     color: "#f8f8fb"
@@ -69,7 +69,7 @@ MouseArea {
                     maximumLineCount: 1
                 }
 
-                QQC2.Label {
+                PlasmaLabel {
                     Layout.fillWidth: true
                     text: kdeTile.reachableDevices > 0 ? kdeTile.reachableDevices + " reachable" : app.kdeConnectSummary()
                     color: "#8f9099"
@@ -126,7 +126,7 @@ MouseArea {
                         Layout.fillWidth: true
                         spacing: -1
 
-                        QQC2.Label {
+                        PlasmaLabel {
                             Layout.fillWidth: true
                             text: kdeTile.deviceText(modelData, "name", "Device")
                             color: "#f4f4f8"
@@ -136,7 +136,7 @@ MouseArea {
                             maximumLineCount: 1
                         }
 
-                        QQC2.Label {
+                        PlasmaLabel {
                             visible: kdeTile.detailed
                             Layout.fillWidth: true
                             text: kdeTile.deviceText(modelData, "status", "available")
@@ -183,7 +183,7 @@ MouseArea {
             }
         }
 
-        QQC2.Label {
+        PlasmaLabel {
             visible: !kdeTile.hasDevices
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -194,7 +194,7 @@ MouseArea {
             verticalAlignment: Text.AlignVCenter
         }
 
-        QQC2.Label {
+        PlasmaLabel {
             visible: kdeTile.hasDevices && kdeTile.totalDevices > kdeTile.visibleDeviceCount
             Layout.fillWidth: true
             text: "+" + (kdeTile.totalDevices - kdeTile.visibleDeviceCount) + " more"

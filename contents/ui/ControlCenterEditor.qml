@@ -403,7 +403,7 @@ Item {
         height: 34
         spacing: 8
 
-        QQC2.Label {
+        PlasmaLabel {
             Layout.fillWidth: true
             text: app.controlEditMode ? app.controlLayoutDirty ? "Edit control center *" : "Edit control center" : "Control center"
             color: "#f8f8fb"
@@ -413,7 +413,7 @@ Item {
             elide: Text.ElideRight
         }
 
-        QQC2.Label {
+        PlasmaLabel {
             visible: app.controlEditMode
             Layout.maximumWidth: 150
             text: app.controlLayoutDirty ? "Unsaved" : "Saved"
@@ -558,7 +558,7 @@ Item {
             anchors.margins: 10
             spacing: 8
 
-            QQC2.Label {
+            PlasmaLabel {
                 Layout.fillWidth: true
                 text: "Modules"
                 color: "#f8f8fb"
@@ -566,7 +566,7 @@ Item {
                 font.weight: Font.Bold
             }
 
-            QQC2.Label {
+            PlasmaLabel {
                 Layout.fillWidth: true
                 text: app.controlDropOnPalette ? "Release to hide this tile." : "Drag into the grid. Drop here to hide."
                 color: app.controlDropOnPalette ? "#d8d8ff" : "#8f9099"
@@ -682,7 +682,7 @@ Item {
                 color: "#f1f1f6"
             }
 
-            QQC2.Label {
+            PlasmaLabel {
                 Layout.fillWidth: true
                 text: paletteModule.title
                 color: "#f1f1f6"

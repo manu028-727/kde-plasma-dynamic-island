@@ -2,6 +2,31 @@
 
 All notable user-facing changes should be documented here.
 
+## 0.3.0
+
+### Activity pills
+
+- Added dedicated compact and expanded layouts for music, notifications, and downloads/jobs, with automatic priority-based switching between active providers.
+- Expanded the MPRIS presentation with album artwork, animated audio bars, playback progress and elapsed time, plus previous, play/pause, and next controls.
+- Added per-job progress, status details, and pause, resume, and cancel controls when supported by the source application.
+- Added expanded keyboard-layout announcements with the full layout name, display name, and short layout code.
+
+### Notifications
+
+- Fixed notification images and thumbnails by supporting Plasma image data and image URLs while keeping the application icon separate.
+- Added an expanded multi-line notification preview and a compact pill with an animated unread indicator.
+- Added configurable notification body length, preview line count, image visibility, and popup duration.
+- Kept timed-out and system-popup-dismissed notifications in Dynamic Island's history until they are closed or cleared from the applet.
+- Prevented expired notifications from invoking actions that Plasma has already invalidated.
+
+### Configuration and polish
+
+- Added a General configuration page with independent toggles for music, notification, job, and keyboard-layout activity providers.
+- Added configurable durations for notification popups and other ongoing announcements.
+- Kept floating popups within the nearest screen's bounds, including when the widget is placed near an edge, without changing the morph animation's origin.
+- Made applet-owned labels, menus, checkboxes, and spin boxes follow KDE Plasma's configured font family across regular, demi-bold, and bold text.
+- Removed the unsupported `shadowEnabled` property for Plasma 6 compatibility.
+
 ## 0.2.2
 
 - Test release to validate the CI packaging workflow.

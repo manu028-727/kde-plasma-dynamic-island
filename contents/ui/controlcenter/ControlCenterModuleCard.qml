@@ -130,7 +130,7 @@ Rectangle {
         width: moduleLabel.implicitWidth + 16
         height: 22
 
-        QQC2.Label {
+        PlasmaLabel {
             id: moduleLabel
             anchors.centerIn: parent
             text: app.moduleInfo(moduleCard.moduleId).name

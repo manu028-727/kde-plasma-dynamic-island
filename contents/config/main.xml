@@ -8,5 +8,32 @@
         <entry name="controlCenterLayoutJson" type="String">
             <default></default>
         </entry>
+        <entry name="mediaActivityEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="notificationActivityEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="jobActivityEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="keyboardLayoutActivityEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="notificationShowImages" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="notificationBodyCharacterLimit" type="Int">
+            <default>240</default>
+        </entry>
+        <entry name="notificationBodyLineLimit" type="Int">
+            <default>3</default>
+        </entry>
+        <entry name="notificationPopupDurationSeconds" type="Int">
+            <default>4</default>
+        </entry>
+        <entry name="ongoingPopupDurationSeconds" type="Int">
+            <default>3</default>
+        </entry>
     </group>
 </kcfg>

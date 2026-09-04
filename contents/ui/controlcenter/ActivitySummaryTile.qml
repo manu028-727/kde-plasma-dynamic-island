@@ -63,7 +63,7 @@ Rectangle {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 2
-                    QQC2.Label {
+                    PlasmaLabel {
                         Layout.fillWidth: true
                         text: activitySummary.showAnyActivity ? app.primaryText() : activitySummary.mediaOnly ? "Nothing playing" : "Ready"
                         color: "#ffffff"
@@ -72,7 +72,7 @@ Rectangle {
                         elide: Text.ElideRight
                         maximumLineCount: 1
                     }
-                    QQC2.Label {
+                    PlasmaLabel {
                         Layout.fillWidth: true
                         text: activitySummary.showAnyActivity ? app.secondaryText() : activitySummary.mediaOnly ? "" : "Media, notifications and jobs"
                         color: "#9b9ba6"
@@ -111,7 +111,7 @@ Rectangle {
                     IslandButton { iconName: app.isPlaying ? "media-playback-pause" : "media-playback-start"; compact: true; emphasized: true; enabled: app.player && (app.player.canPlay || app.player.canPause); onClicked: activitySummary.playPause() }
                     IslandButton { iconName: "media-skip-forward"; compact: true; enabled: app.player && app.player.canGoNext; onClicked: activitySummary.next() }
                 }
-                QQC2.Label {
+                PlasmaLabel {
                     Layout.fillWidth: true
                     text: activitySummary.mediaOnly ? app.hasPlayer ? app.player.identity || "Media player" : "" : app.hasJobs ? "Download active" : app.hasNotifications ? notificationsSource.unreadNotificationsCount + " unread" : "No activity"
                     color: "#8f9099"

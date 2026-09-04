@@ -19,20 +19,24 @@
 
 A KDE Plasma 6 widget inspired by the iOS/macOS Dynamic Island: a compact black pill for live activity plus a dark floating control-center popup.
 
-## Alpha Warning
+## Instability warning
 
-This applet is currently in an alpha state. It is usable, but bugs, visual glitches, missing edge cases, or Plasma-version-specific issues may happen while the widget is still evolving.
+This package is in alpha state. It is usable, but bugs, visual glitches, missing edge cases, or Plasma-version-specific issues may happen while the widget is still evolving.
 
 ## Features
 
-- Real MPRIS media controls: previous, play/pause, next, album art, track/artist, progress, and player volume when exposed.
-- Plasma notification integration using `org.kde.notificationmanager`.
-- Job/download activity progress with pause/resume/cancel when the source job supports it.
+- Dedicated compact and expanded activity pills with priority-based switching between music, notifications, downloads/jobs, and keyboard-layout announcements.
+- Real MPRIS media controls: previous, play/pause, next, album art, animated audio bars, track/artist, playback progress, and player volume when exposed.
+- Plasma notification integration with app icons, images and thumbnails, multi-line previews, an animated unread indicator, and retained notification history.
+- Job/download activity progress with status details and pause/resume/cancel when the source job supports it.
+- Full-name keyboard-layout switch announcements in an expanded pill.
 - Compact textless panel pill with black glass styling, masked album art, and quick pulse feedback for new activity.
-- New activity opens a temporary floating activity popup for about 3 seconds.
+- New activity opens a temporary floating activity popup for a configurable duration.
 - Single-click idle opens the control center popup; single-click during activity reopens the activity popup; double-click opens control center.
 - Middle-click toggles media playback.
 - Scroll over the island to adjust the active player's volume.
+- Screen-aware popup placement keeps the expanded pill and control center within the nearest display while preserving the morph animation.
+- A General configuration page controls activity providers, notification previews and images, and popup durations.
 - Modular control center with a JSON-backed persistent layout, graphical edit mode, drag-to-swap tiles, corner resizing, a side module palette, and a fallback default module layout.
 - Control center modules include user/host/power options, media summary, notifications, volume control, brightness control, Wi-Fi, Bluetooth, battery, power mode, light/dark appearance, Theme shortcut, KDE Connect, and Settings.
 
@@ -130,9 +134,7 @@ The control center layout is stored in Plasma configuration as JSON and is reset
 
 Planned and possible directions for the project. Items are not guaranteed and may change.
 
-- **Stable release (0.3.0)** — drop the Alpha status once CI is green and the widget is verified on supported Plasma 6 releases.
-- **Continuous packaging** — auto-build the `.plasmoid` from tags via CI and attach it to every release.
-- **Maintainability** — continue splitting the monolithic `main.qml` into dedicated components (media pill, jobs row, activity popup) following the 0.2.0 refactor pattern.
+- **Maintainability** — continue splitting the remaining control and integration logic out of the monolithic `main.qml`.
 - **Localization (i18n)** — translate user-facing strings into additional languages.
 - **Accessibility** — improved keyboard navigation and screen-reader labels.
 - **Theming options** — configurable pill appearance (corner radius, width, accent color) exposed in the widget configuration.

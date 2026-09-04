@@ -66,7 +66,7 @@ Item {
         opacity: controlSlider.enabled ? 1 : 0.42
     }
 
-    QQC2.Label {
+    PlasmaLabel {
         visible: controlSlider.width >= 116 && !controlSlider.showActions
         anchors.right: parent.right
         anchors.top: parent.top
@@ -132,7 +132,7 @@ Item {
         }
     }
 
-    QQC2.Label {
+    PlasmaLabel {
         visible: controlSlider.showActions && controlSlider.width >= 180
         anchors.left: parent.left
         anchors.top: parent.top
