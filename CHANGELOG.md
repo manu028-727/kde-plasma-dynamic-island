@@ -2,6 +2,10 @@
 
 All notable user-facing changes should be documented here.
 
+## 0.2.1
+
+- Improved compatibility for newer Plasma versions
+
 ## 0.2.0
 
 - Split the control center editor into its own QML component while keeping the tile renderer in the main island file.
