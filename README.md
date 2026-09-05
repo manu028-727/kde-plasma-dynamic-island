@@ -39,6 +39,7 @@ This package is in alpha state. It is usable, but bugs, visual glitches, missing
 - A General configuration page controls activity providers, notification previews and images, and popup durations.
 - Modular control center with a JSON-backed persistent layout, graphical edit mode, drag-to-swap tiles, corner resizing, a side module palette, and a fallback default module layout.
 - Control center modules include user/host/power options, media summary, notifications, volume control, brightness control, Wi-Fi, Bluetooth, battery, power mode, light/dark appearance, Theme shortcut, KDE Connect, and Settings.
+- The Network module shows an active connection and its address, with signal strength for connected Wi-Fi. Its indicator describes a network connection; it does not check Internet reachability.
 
 ## Install
 

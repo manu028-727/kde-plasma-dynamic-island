@@ -6,6 +6,7 @@ Item {
     property string mode: "idle"
     property real progress: 0
     property bool playing: false
+    readonly property real safeProgress: isFinite(Number(progress)) ? Math.max(0, Math.min(1, Number(progress))) : 0
 
     onModeChanged: canvas.requestPaint()
     onProgressChanged: canvas.requestPaint()
@@ -48,7 +49,7 @@ Item {
                 ctx.stroke();
                 ctx.strokeStyle = "#42d77d";
                 ctx.beginPath();
-                ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.02, Math.min(1, glyph.progress)));
+                ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.02, glyph.safeProgress));
                 ctx.stroke();
                 ctx.fillStyle = "#42d77d";
                 ctx.fillRect(cx - 2, cy - 7, 4, 10);

@@ -10,8 +10,9 @@ QtObject {
 
     function providerByKey(key) {
         for (let i = 0; i < providers.length; ++i) {
-            if (providers[i].key === key)
-                return providers[i];
+            const provider = providers[i];
+            if (provider && provider.key === key)
+                return provider;
         }
         return null;
     }
@@ -20,7 +21,7 @@ QtObject {
         let selected = null;
         for (let i = 0; i < providers.length; ++i) {
             const candidate = providers[i];
-            if (!candidate.active)
+            if (!candidate || !candidate.active)
                 continue;
             if (!selected || candidate.priority > selected.priority)
                 selected = candidate;
@@ -64,6 +65,7 @@ QtObject {
 
     function autoCloseMsFor(requestedKey) {
         const provider = providerFor(requestedKey);
-        return provider ? Math.max(1000, provider.autoCloseMs) : 3000;
+        const ms = provider ? Number(provider.autoCloseMs) : 3000;
+        return isFinite(ms) ? Math.max(1000, ms) : 3000;
     }
 }

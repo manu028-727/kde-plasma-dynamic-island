@@ -13,13 +13,14 @@ Item {
     property real glyphSize: width * 0.74
     readonly property bool hasArtworkSource: artworkSource && artworkSource.toString().length > 0
     readonly property bool hasArtwork: hasArtworkSource && maskedImage.status === Image.Ready
+    readonly property real safeProgress: isFinite(Number(progress)) ? Math.max(0, Math.min(1, Number(progress))) : 0
 
     Rectangle { anchors.fill: parent; radius: maskedArtwork.cornerRadius; color: "#101015" }
 
     Image {
         id: maskedImage
         anchors.fill: parent
-        source: maskedArtwork.artworkSource
+        source: maskedArtwork.hasArtworkSource ? maskedArtwork.artworkSource : ""
         fillMode: Image.PreserveAspectCrop
         visible: maskedArtwork.hasArtwork
         layer.enabled: visible
@@ -44,9 +45,8 @@ Item {
         width: maskedArtwork.glyphSize
         height: width
         mode: maskedArtwork.mode
-        progress: maskedArtwork.progress
+        progress: maskedArtwork.safeProgress
         playing: maskedArtwork.playing
         visible: !maskedArtwork.hasArtwork
     }
 }
-

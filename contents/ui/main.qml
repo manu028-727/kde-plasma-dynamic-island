@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls as QQC2
 import QtQuick.Effects
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -16,6 +15,7 @@ import org.kde.plasma.private.volume
 import org.kde.plasma.workspace.keyboardlayout as KeyboardLayout
 import "controlcenter"
 import "controlcenter/ModuleRegistry.js" as ModuleRegistry
+import "controlcenter/NetworkState.js" as NetworkState
 import "activities" as Activities
 
 PlasmoidItem {
@@ -76,9 +76,10 @@ PlasmoidItem {
     property bool bluetoothAvailable: false
     property string bluetoothAdapterName: ""
     property string bluetoothDevicesText: ""
-    property string wifiNetworksText: ""
-    property string networkDevicesText: ""
-    property string networkIpText: ""
+    property var wifiNetworks: []
+    property var networkDevices: []
+    property var networkAddresses: []
+    readonly property var networkState: NetworkState.summarize(networkDevices, networkAddresses, wifiNetworks, enabledConnections.networkingEnabled, enabledConnections.wirelessEnabled && enabledConnections.wirelessHwEnabled)
     property string kdeConnectDevicesText: ""
     property string popupMode: "control"
     property string activityPopupMode: "auto"
@@ -113,9 +114,9 @@ PlasmoidItem {
     property int controlResizeHeightUnits: 1
     readonly property bool controlLayoutDirty: controlEditMode && controlLayoutRevision >= 0 && !sameControlLayout(controlLayoutDraft, committedControlLayout())
     readonly property string accountIconCommand: "sh -c 'user=$(id -un); path=$(qdbus6 org.freedesktop.Accounts /org/freedesktop/Accounts org.freedesktop.Accounts.FindUserByName \"$user\" 2>/dev/null); test -n \"$path\" && qdbus6 org.freedesktop.Accounts \"$path\" org.freedesktop.Accounts.User.IconFile 2>/dev/null'"
-    readonly property string wifiScanCommand: "nmcli -t -f IN-USE,SSID,SIGNAL device wifi list --rescan no"
-    readonly property string networkStatusCommand: "nmcli -t -f TYPE,DEVICE,STATE,CONNECTION device status"
-    readonly property string networkIpCommand: "nmcli -t -f GENERAL.DEVICE,IP4.ADDRESS device show"
+    readonly property string wifiScanCommand: "env LC_ALL=C nmcli --colors no -t -f IN-USE,SSID,SIGNAL,DEVICE device wifi list --rescan no"
+    readonly property string networkStatusCommand: "env LC_ALL=C nmcli --colors no -t -f TYPE,DEVICE,STATE,CONNECTION device status"
+    readonly property string networkIpCommand: "env LC_ALL=C nmcli --colors no -t -f GENERAL.DEVICE,IP4.ADDRESS,IP6.ADDRESS device show"
     readonly property string kdeConnectCommand: "kdeconnect-cli --list-devices"
 
     onControlEditModeChanged: {
@@ -994,9 +995,7 @@ PlasmoidItem {
     function refreshConnectivityState() {
         executable.exec("bluetoothctl show");
         executable.exec("bluetoothctl devices Connected");
-        executable.exec(wifiScanCommand);
-        executable.exec(networkStatusCommand);
-        executable.exec(networkIpCommand);
+        refreshWifiNetworks();
         executable.exec(kdeConnectCommand);
     }
 
@@ -1192,173 +1191,12 @@ PlasmoidItem {
         return enabledConnections.wirelessEnabled ? "On" : "Off";
     }
 
-    function wifiRows(limit) {
-        const rows = [];
-        const lines = root.wifiNetworksText.length > 0 ? root.wifiNetworksText.split("\n") : [];
-        const maxRows = Math.max(0, Math.round(finiteNumber(limit, 0)));
-        for (let i = 0; i < lines.length; ++i) {
-            const line = String(lines[i] || "").trim();
-            if (line.length <= 0)
-                continue;
-
-            rows.push(line);
-            if (maxRows > 0 && rows.length >= maxRows)
-                break;
-
-        }
-        return rows;
-    }
-
-    function connectedNetworkRows(limit) {
-        const rows = [];
-        const lines = root.networkDevicesText.length > 0 ? root.networkDevicesText.split("\n") : [];
-        const maxRows = Math.max(0, Math.round(finiteNumber(limit, 0)));
-        for (let i = 0; i < lines.length; ++i) {
-            const line = String(lines[i] || "").trim();
-            if (line.length <= 0)
-                continue;
-
-            rows.push(line);
-            if (maxRows > 0 && rows.length >= maxRows)
-                break;
-
-        }
-        return rows;
-    }
-
     function wifiPrimaryNetwork() {
-        const rows = wifiRows(1);
-        return rows.length > 0 ? rows[0].replace(/^• /, "") : enabledConnections.wirelessEnabled ? "No scan results" : "Disabled";
+        return networkState.wifiSummary;
     }
 
     function wifiSignalPercent() {
-        const rows = wifiRows(1);
-        if (rows.length <= 0)
-            return 0;
-
-        const match = rows[0].match(/(\d+)%$/);
-        return match ? clampNumber(match[1], 0, 100) : 0;
-    }
-
-    function networkSummary() {
-        if (!enabledConnections.networkingEnabled)
-            return "Offline";
-        const rows = connectedNetworkRows(1);
-        if (rows.length > 0)
-            return rows[0];
-        if (enabledConnections.wirelessEnabled && wifiSignalPercent() > 0)
-            return wifiSignalPercent() + "% Wi-Fi signal";
-        return "Connected";
-    }
-
-    function networkTitle() {
-        if (!enabledConnections.networkingEnabled)
-            return "Offline";
-        const rows = connectedNetworkRows(1);
-        if (rows.length <= 0)
-            return enabledConnections.wirelessEnabled ? "Wi-Fi" : "Network";
-        if (rows[0].indexOf("Wired") === 0)
-            return "Wired";
-        if (rows[0].indexOf("Wi-Fi") === 0)
-            return "Wi-Fi";
-        return "Network";
-    }
-
-    function networkDetail() {
-        const rows = connectedNetworkRows(3);
-        const ip = cleanText(networkIpText);
-        if (rows.length > 0 && ip.length > 0)
-            return rows.join("\n") + "\n" + ip;
-        if (rows.length > 0)
-            return rows.join("\n");
-        return enabledConnections.networkingEnabled ? "No active connection details" : "Networking disabled";
-    }
-
-    function parseWifiNetworks(text) {
-        const lines = String(text || "").split("\n");
-        const out = [];
-        for (let i = 0; i < lines.length; ++i) {
-            const parts = splitNmcliFields(lines[i]);
-            if (parts.length < 3)
-                continue;
-
-            const active = parts[0] === "*";
-            const ssid = parts[1] || "Hidden network";
-            const signal = clampNumber(parts[2], 0, 100);
-            out.push((active ? "• " : "") + ssid + (isFinite(Number(parts[2])) ? " " + signal + "%" : ""));
-            if (out.length >= 3)
-                break;
-
-        }
-        return out.join("\n");
-    }
-
-    function parseNetworkDevices(text) {
-        const lines = String(text || "").split("\n");
-        const out = [];
-        for (let i = 0; i < lines.length; ++i) {
-            const parts = splitNmcliFields(lines[i]);
-            if (parts.length < 4 || parts[2] !== "connected")
-                continue;
-
-            const type = parts[0];
-            const device = parts[1] || "";
-            const connection = parts[3] || device || "Connected";
-            if (type === "ethernet")
-                out.push("Wired " + connection);
-            else if (type === "wifi")
-                out.push("Wi-Fi " + connection);
-            else if (type !== "loopback")
-                out.push(connection);
-
-            if (out.length >= 3)
-                break;
-
-        }
-        return out.join("\n");
-    }
-
-    function parseNetworkAddresses(text) {
-        const lines = String(text || "").split("\n");
-        const out = [];
-        let device = "";
-        for (let i = 0; i < lines.length; ++i) {
-            const parts = splitNmcliFields(lines[i]);
-            if (parts.length < 2)
-                continue;
-
-            if (parts[0] === "GENERAL.DEVICE") {
-                device = parts[1];
-            } else if (parts[0] === "IP4.ADDRESS[1]" && parts[1].length > 0) {
-                out.push((device.length > 0 ? device + " " : "") + parts[1].replace(/\/\d+$/, ""));
-                if (out.length >= 2)
-                    break;
-            }
-        }
-        return out.join("\n");
-    }
-
-    function splitNmcliFields(line) {
-        const fields = [];
-        let current = "";
-        let escaped = false;
-        const text = String(line || "");
-        for (let i = 0; i < text.length; ++i) {
-            const ch = text.charAt(i);
-            if (escaped) {
-                current += ch;
-                escaped = false;
-            } else if (ch === "\\") {
-                escaped = true;
-            } else if (ch === ":") {
-                fields.push(current);
-                current = "";
-            } else {
-                current += ch;
-            }
-        }
-        fields.push(current);
-        return fields;
+        return Math.max(0, networkState.wifiSignal);
     }
 
     function parseBluetoothDevices(text) {
@@ -1943,11 +1781,11 @@ PlasmoidItem {
             else if (sourceName === "bluetoothctl devices Connected")
                 root.bluetoothDevicesText = root.parseBluetoothDevices(stdout);
             else if (sourceName === root.wifiScanCommand)
-                root.wifiNetworksText = root.parseWifiNetworks(stdout);
+                root.wifiNetworks = NetworkState.parseWifi(stdout);
             else if (sourceName === root.networkStatusCommand)
-                root.networkDevicesText = root.parseNetworkDevices(stdout);
+                root.networkDevices = NetworkState.parseDevices(stdout);
             else if (sourceName === root.networkIpCommand)
-                root.networkIpText = root.parseNetworkAddresses(stdout);
+                root.networkAddresses = NetworkState.parseAddresses(stdout);
             else if (sourceName === root.kdeConnectCommand)
                 root.kdeConnectDevicesText = root.parseKdeConnectDevices(stdout);
 
@@ -2779,7 +2617,7 @@ PlasmoidItem {
             id: maskedImage
 
             anchors.fill: parent
-            source: maskedArtwork.artworkSource
+            source: maskedArtwork.hasArtworkSource ? maskedArtwork.artworkSource : ""
             fillMode: Image.PreserveAspectCrop
             visible: maskedArtwork.hasArtwork
             layer.enabled: visible

@@ -5,7 +5,7 @@ const modules = [
     { "id": "volume", "name": "Volume", "icon": "audio-volume-high", "defaultW": 8, "defaultH": 2 },
     { "id": "brightness", "name": "Brightness", "icon": "brightness-high", "defaultW": 8, "defaultH": 2 },
     { "id": "wifi", "name": "Wi-Fi", "icon": "network-wireless-on", "disabledIcon": "network-wireless-off", "defaultW": 2, "defaultH": 2 },
-    { "id": "wifiDevices", "name": "Wi-Fi Networks", "icon": "network-wireless-acquiring", "defaultW": 4, "defaultH": 2 },
+    { "id": "wifiDevices", "name": "Network", "icon": "network-wireless-acquiring", "defaultW": 4, "defaultH": 2 },
     { "id": "bluetooth", "name": "Bluetooth", "icon": "preferences-system-bluetooth", "defaultW": 2, "defaultH": 2 },
     { "id": "bluetoothDiscovery", "name": "Bluetooth Discovery", "icon": "preferences-system-bluetooth", "defaultW": 4, "defaultH": 2 },
     { "id": "notifications", "name": "Notifications", "icon": "notifications", "defaultW": 4, "defaultH": 4, "minW": 2, "minH": 2 },

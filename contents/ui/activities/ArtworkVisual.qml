@@ -14,6 +14,7 @@ Item {
 
     readonly property bool hasSource: source !== undefined && source !== null && String(source).length > 0
     readonly property bool ready: hasSource && image.status === Image.Ready
+    readonly property real safeProgress: isFinite(Number(progress)) ? Math.max(0, Math.min(1, Number(progress))) : 0
 
     Rectangle {
         anchors.fill: parent
@@ -27,7 +28,7 @@ Item {
         id: image
 
         anchors.fill: parent
-        source: artwork.source
+        source: artwork.hasSource ? artwork.source : ""
         asynchronous: true
         fillMode: Image.PreserveAspectCrop
         visible: artwork.ready
@@ -55,7 +56,7 @@ Item {
         width: artwork.glyphSize
         height: width
         mode: artwork.fallbackMode
-        progress: artwork.progress
+        progress: artwork.safeProgress
         playing: artwork.playing
         visible: !artwork.ready
     }

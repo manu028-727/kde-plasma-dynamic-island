@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.notificationmanager as NotificationManager
@@ -21,6 +20,9 @@ Item {
 
     function closeRow(row) {
         if (row < 0 || row >= notificationsSource.count)
+            return;
+
+        if (!app.rowValue(row, NotificationManager.Notifications.ClosableRole, true))
             return;
 
         notificationsSource.close(notificationsSource.index(row, 0));

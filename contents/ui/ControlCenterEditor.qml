@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -87,14 +86,14 @@ Item {
         if (!app.controlDragActive || !app.controlDragSource || app.controlDropOnPalette || !hasCellTarget)
             return layout;
 
-        const placeholder = app.controlDragSource.fromPalette
-            ? defaultModuleSize(app.controlDragSource.moduleId)
-            : {
+        let placeholder = app.controlDragSource.fromPalette
+            ? cloneLayoutItem(defaultModuleSize(app.controlDragSource.moduleId))
+            : cloneLayoutItem({
                 "id": "__dropPlaceholder",
                 "w": app.controlDragSource.moduleWidthUnits,
                 "h": app.controlDragSource.moduleHeightUnits,
                 "v": 2
-            };
+            });
         placeholder.id = "__dropPlaceholder";
         placeholder.col = app.controlDropCol;
         placeholder.row = app.controlDropRow;
@@ -109,8 +108,18 @@ Item {
                 layout.splice(from, 1);
         }
 
-        layout.unshift(placeholder);
-        return layout;
+        return insertItemAtRowMajorTarget(layout, placeholder, app.controlDropCol, app.controlDropRow);
+    }
+
+    function cloneLayoutItem(item) {
+        return {
+            "id": item && item.id ? item.id : "",
+            "w": item ? item.w : 1,
+            "h": item ? item.h : 1,
+            "v": item && item.v ? item.v : 2,
+            "col": item && isFinite(Number(item.col)) ? Math.round(item.col) : undefined,
+            "row": item && isFinite(Number(item.row)) ? Math.round(item.row) : undefined
+        };
     }
 
     function canPlace(occupied, col, row, w, h) {
@@ -133,6 +142,88 @@ Item {
                 occupied[y + ":" + x] = true;
 
         }
+    }
+
+    function rowMajorIndex(col, row) {
+        const safeCol = Math.max(0, Math.min(moduleGrid.columns - 1, Math.round(app.finiteNumber(col, 0))));
+        const safeRow = Math.max(0, Math.round(app.finiteNumber(row, 0)));
+        return safeRow * moduleGrid.columns + safeCol;
+    }
+
+    function itemRowMajorIndex(item) {
+        if (!item || !isFinite(Number(item.col)) || !isFinite(Number(item.row)))
+            return Number.POSITIVE_INFINITY;
+
+        return rowMajorIndex(item.col, item.row);
+    }
+
+    function itemOverlapsTarget(item, col, row, w, h) {
+        if (!item || !isFinite(Number(item.col)) || !isFinite(Number(item.row)))
+            return false;
+
+        const itemCol = Math.max(0, Math.round(item.col));
+        const itemRow = Math.max(0, Math.round(item.row));
+        const itemW = gridUnitWidth(item);
+        const itemH = gridUnitHeight(item);
+        return col < itemCol + itemW && col + w > itemCol && row < itemRow + itemH && row + h > itemRow;
+    }
+
+    function layoutHasModule(layout, id) {
+        for (let i = 0; i < layout.length; ++i) {
+            if (layout[i] && layout[i].id === id)
+                return true;
+        }
+        return false;
+    }
+
+    function insertItemAtRowMajorTarget(layout, item, col, row) {
+        const targetIndex = rowMajorIndex(col, row);
+        const targetWidth = gridUnitWidth(item);
+        const targetHeight = gridUnitHeight(item);
+        const ordered = layout.slice().sort(function(left, right) {
+            const leftIndex = itemRowMajorIndex(left);
+            const rightIndex = itemRowMajorIndex(right);
+            if (leftIndex !== rightIndex) {
+                if (!isFinite(leftIndex))
+                    return 1;
+                if (!isFinite(rightIndex))
+                    return -1;
+                return leftIndex - rightIndex;
+            }
+            return layout.indexOf(left) - layout.indexOf(right);
+        });
+
+        let insertAt = ordered.length;
+        for (let i = 0; i < ordered.length; ++i) {
+            // Reserve the entire footprint, including overlaps away from the target's top-left cell.
+            if (itemOverlapsTarget(ordered[i], col, row, targetWidth, targetHeight) || itemRowMajorIndex(ordered[i]) >= targetIndex) {
+                insertAt = i;
+                break;
+            }
+        }
+        ordered.splice(insertAt, 0, item);
+        return ordered;
+    }
+
+    function savePackedLayout(ordered) {
+        const placed = packLayout(ordered);
+        const saved = [];
+        for (let i = 0; i < ordered.length; ++i) {
+            const module = ordered[i];
+            const placement = placed[module.id];
+            if (!placement)
+                continue;
+
+            saved.push({
+                "id": module.id,
+                "w": placement.w,
+                "h": placement.h,
+                "col": placement.col,
+                "row": placement.row,
+                "v": 2
+            });
+        }
+        app.updateControlLayout(saved);
     }
 
     function canDropAtCell(col, row) {
@@ -174,20 +265,18 @@ Item {
                 }
             }
 
-            row = 0;
+            let cursor = isFinite(Number(item.col)) && isFinite(Number(item.row)) ? rowMajorIndex(item.col, item.row) : 0;
             while (!found) {
-                for (let col = 0; col <= moduleGrid.columns - w; ++col) {
-                    if (!canPlace(occupied, col, row, w, h))
-                        continue;
+                row = Math.floor(cursor / moduleGrid.columns);
+                const col = cursor % moduleGrid.columns;
+                cursor++;
 
+                if (col + w <= moduleGrid.columns && canPlace(occupied, col, row, w, h)) {
                     occupy(occupied, col, row, w, h);
                     placed[item.id] = { "col": col, "row": row, "w": w, "h": h, "order": i };
                     rows = Math.max(rows, row + h);
                     found = true;
-                    break;
                 }
-                if (!found)
-                    row++;
             }
         }
 
@@ -311,7 +400,17 @@ Item {
         }
 
         if (source.fromPalette && containsPoint(moduleFlickable, x, y))
-            app.addControlModule(source.moduleId);
+            addModuleAtFirstAvailableCell(source.moduleId);
+    }
+
+    function addModuleAtFirstAvailableCell(id) {
+        const layout = app.controlLayout();
+        if (layoutHasModule(layout, id))
+            return ;
+
+        const item = defaultModuleSize(id);
+        item.v = 2;
+        savePackedLayout(layout.concat([item]));
     }
 
     function commitControlDropAtCell(source, col, row) {
@@ -319,10 +418,9 @@ Item {
         let item = null;
 
         if (source.fromPalette) {
-            for (let i = 0; i < layout.length; ++i) {
-                if (layout[i].id === source.moduleId)
-                    return ;
-            }
+            if (layoutHasModule(layout, source.moduleId))
+                return ;
+
             item = defaultModuleSize(source.moduleId);
         } else {
             if (source.moduleIndex < 0 || source.moduleIndex >= layout.length)
@@ -334,25 +432,7 @@ Item {
         item.col = Math.max(0, Math.min(moduleGrid.columns - gridUnitWidth(item), Math.round(col)));
         item.row = Math.max(0, Math.round(row));
 
-        const ordered = [item].concat(layout);
-        const placed = packLayout(ordered);
-        const saved = [];
-        for (let i = 0; i < ordered.length; ++i) {
-            const module = ordered[i];
-            const placement = placed[module.id];
-            if (!placement)
-                continue;
-
-            saved.push({
-                "id": module.id,
-                "w": placement.w,
-                "h": placement.h,
-                "col": placement.col,
-                "row": placement.row,
-                "v": 2
-            });
-        }
-        app.updateControlLayout(saved);
+        savePackedLayout(insertItemAtRowMajorTarget(layout, item, item.col, item.row));
     }
 
     function commitControlResize(source, widthUnits, heightUnits) {
@@ -373,25 +453,7 @@ Item {
         item.row = Math.max(0, Math.round(app.finiteNumber(basePlacement.row, 0)));
         item.v = 2;
 
-        const ordered = [item].concat(layout);
-        const placed = packLayout(ordered);
-        const saved = [];
-        for (let i = 0; i < ordered.length; ++i) {
-            const module = ordered[i];
-            const placement = placed[module.id];
-            if (!placement)
-                continue;
-
-            saved.push({
-                "id": module.id,
-                "w": placement.w,
-                "h": placement.h,
-                "col": placement.col,
-                "row": placement.row,
-                "v": 2
-            });
-        }
-        app.updateControlLayout(saved);
+        savePackedLayout([item].concat(layout));
     }
 
     RowLayout {
@@ -705,7 +767,7 @@ Item {
             preventStealing: true
             onClicked: {
                 if (!movedEnough)
-                    app.addControlModule(paletteModule.moduleId);
+                    editor.addModuleAtFirstAvailableCell(paletteModule.moduleId);
 
             }
             onPressed: (mouse) => {

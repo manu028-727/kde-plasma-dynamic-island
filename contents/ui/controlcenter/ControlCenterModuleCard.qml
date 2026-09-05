@@ -1,8 +1,4 @@
 import QtQuick
-import QtQuick.Controls as QQC2
-import QtQuick.Layouts
-import org.kde.kirigami as Kirigami
-import org.kde.notificationmanager as NotificationManager
 import org.kde.plasma.private.brightnesscontrolplugin as Brightness
 import ".."
 
@@ -272,7 +268,7 @@ Rectangle {
             onTriggered: connectionsSource.wirelessHwEnabled ? app.toggleWifi() : app.launchNetworkSettings()
         }
     }
-    Component { id: wifiDevicesModule; NetworkListTile { app: moduleCard.app; connectionsSource: moduleCard.connectionsSource } }
+    Component { id: wifiDevicesModule; NetworkListTile { app: moduleCard.app } }
     Component { id: mediaModule; ActivitySummaryTile { app: moduleCard.app; notificationsSource: moduleCard.notificationsSource; mediaOnly: true; radius: moduleCard.radius; border.width: 0 } }
     Component { id: notificationsModule; NotificationsTile { app: moduleCard.app; notificationsSource: moduleCard.notificationsSource } }
     Component {

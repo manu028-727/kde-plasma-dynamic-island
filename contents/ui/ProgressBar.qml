@@ -7,7 +7,10 @@ Item {
     property real to: 100
     property real value: 0
     property color accent: "#5ac8fa"
-    readonly property real amount: Math.max(0, Math.min(1, (value - from) / Math.max(1, to - from)))
+    readonly property real safeFrom: isFinite(Number(from)) ? Number(from) : 0
+    readonly property real safeTo: isFinite(Number(to)) ? Number(to) : safeFrom + 1
+    readonly property real safeValue: isFinite(Number(value)) ? Number(value) : safeFrom
+    readonly property real amount: Math.max(0, Math.min(1, (safeValue - safeFrom) / Math.max(1, safeTo - safeFrom)))
 
     implicitHeight: 8
 

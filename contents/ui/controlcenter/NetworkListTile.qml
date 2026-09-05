@@ -8,13 +8,10 @@ MouseArea {
     id: networkList
 
     required property var app
-    required property var connectionsSource
+    readonly property var networkStatus: app.networkState
     readonly property bool compact: width < 150 || height < 86
     readonly property bool iconOnly: width < 96 || height < 58
-    readonly property var rows: app.wifiRows(compact ? 2 : 4)
-    readonly property var connectedRows: app.connectedNetworkRows(compact ? 1 : 2)
-    readonly property var ipRows: !compact && app.networkIpText.length > 0 ? app.networkIpText.split("\n").slice(0, 2) : []
-    readonly property var visibleRows: connectedRows && connectedRows.length > 0 ? connectedRows.concat(ipRows || []).concat(rows || []) : rows && rows.length > 0 ? rows : [connectionsSource.wirelessEnabled ? "No visible networks" : "Open network settings"]
+    readonly property bool detailed: width >= 190 && height >= 112
 
     anchors.fill: parent
     hoverEnabled: true
@@ -24,19 +21,9 @@ MouseArea {
     Rectangle {
         anchors.fill: parent
         radius: Math.min(18, Math.min(width, height) / 2)
-        color: networkList.pressed ? "#242630" : networkList.containsMouse ? "#1a1b24" : "#15161d"
-        border.color: "#2a2b35"
+        color: networkList.pressed ? "#242630" : networkList.containsMouse ? "#1a1b24" : networkList.networkStatus.connected ? "#171821" : "#15161d"
+        border.color: networkList.networkStatus.connected && !networkList.iconOnly ? Qt.rgba(0.35, 0.78, 0.98, 0.36) : "#2a2b35"
         border.width: 1
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: app.wifiSignalPercent() > 0 ? Math.max(3, parent.height * app.wifiSignalPercent() / 100) : 0
-            radius: parent.radius
-            color: "#5ac8fa"
-            opacity: connectionsSource.wirelessEnabled && app.wifiSignalPercent() > 0 && !networkList.iconOnly ? 0.1 : 0
-        }
     }
 
     ColumnLayout {
@@ -51,49 +38,91 @@ MouseArea {
             Kirigami.Icon {
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 18
-                source: app.networkTitle() === "Wired" ? "network-wired-activated" : connectionsSource.wirelessEnabled ? "network-wireless-on" : "network-wireless-off"
-                color: connectionsSource.networkingEnabled ? "#5ac8fa" : "#8f9099"
+                source: networkList.networkStatus.icon
+                color: networkList.networkStatus.connected ? "#5ac8fa" : "#8f9099"
             }
             PlasmaLabel {
                 Layout.fillWidth: true
-                text: app.networkTitle()
+                text: networkList.networkStatus.title
+                textFormat: Text.PlainText
                 color: "#f8f8fb"
                 font.pixelSize: 11
                 font.weight: Font.Bold
                 elide: Text.ElideRight
             }
             PlasmaLabel {
-                visible: networkList.width >= 156
-                text: app.wifiSignalPercent() > 0 ? app.wifiSignalPercent() + "%" : ""
-                color: "#8f9099"
+                visible: networkList.width >= 156 && networkList.networkStatus.signal >= 0
+                text: networkList.networkStatus.signal + "%"
+                color: "#5ac8fa"
                 font.pixelSize: 10
                 font.weight: Font.Bold
             }
             IslandButton {
                 visible: !networkList.compact
+                enabled: networkList.enabled
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 iconName: "view-refresh"
+                tooltipText: "Refresh network status"
                 compact: true
-                onClicked: app.refreshWifiNetworks()
+                onClicked: networkList.app.refreshWifiNetworks()
             }
             IslandButton {
-                visible: !networkList.compact
+                visible: !networkList.compact && networkList.width >= 230
+                enabled: networkList.enabled
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 iconName: "settings"
+                tooltipText: "Network settings"
                 compact: true
-                onClicked: app.launchNetworkSettings()
+                onClicked: networkList.app.launchNetworkSettings()
             }
         }
 
-        Repeater {
-            model: networkList.visibleRows
+        PlasmaLabel {
+            Layout.fillWidth: true
+            text: networkList.networkStatus.summary
+            textFormat: Text.PlainText
+            color: "#f8f8fb"
+            font.pixelSize: networkList.compact ? 10 : 12
+            font.weight: Font.Bold
+            elide: Text.ElideRight
+            maximumLineCount: 1
+        }
+
+        PlasmaLabel {
+            visible: networkList.detailed
+            Layout.fillWidth: true
+            text: networkList.networkStatus.detailLine
+            textFormat: Text.PlainText
+            color: "#8f9099"
+            font.pixelSize: 10
+            elide: Text.ElideRight
+            maximumLineCount: 1
+        }
+
+        Item {
+            visible: networkList.detailed
+            Layout.fillHeight: true
+        }
+
+        RowLayout {
+            visible: networkList.detailed
+            Layout.fillWidth: true
+            spacing: 6
+
+            Rectangle {
+                Layout.preferredWidth: 7
+                Layout.preferredHeight: 7
+                radius: 4
+                color: networkList.networkStatus.connected ? "#34c759" : "#ff453a"
+            }
+
             PlasmaLabel {
                 Layout.fillWidth: true
-                text: modelData
-                color: String(modelData).indexOf("* ") === 0 || String(modelData).indexOf("• ") === 0 ? "#f8f8fb" : "#9b9ca6"
-                font.pixelSize: 10
+                text: networkList.networkStatus.footer
+                color: "#777884"
+                font.pixelSize: 9
                 elide: Text.ElideRight
                 maximumLineCount: 1
             }
@@ -105,11 +134,21 @@ MouseArea {
         anchors.centerIn: parent
         width: Math.max(20, Math.min(36, parent.width - 14, parent.height - 14))
         height: width
-        source: app.networkTitle() === "Wired" ? "network-wired-activated" : connectionsSource.wirelessEnabled ? "network-wireless-on" : "network-wireless-off"
-        color: connectionsSource.networkingEnabled ? "#5ac8fa" : "#8f9099"
+        source: networkList.networkStatus.icon
+        color: networkList.networkStatus.connected ? "#5ac8fa" : "#8f9099"
     }
 
-    QQC2.ToolTip.visible: networkList.containsMouse
-    QQC2.ToolTip.text: app.networkDetail()
-    QQC2.ToolTip.delay: 350
+    QQC2.ToolTip {
+        id: networkToolTip
+
+        visible: networkList.containsMouse
+        text: networkList.networkStatus.detail
+        delay: 350
+        contentItem: PlasmaLabel {
+            text: networkToolTip.text
+            textFormat: Text.PlainText
+            color: networkToolTip.palette.toolTipText
+            wrapMode: Text.Wrap
+        }
+    }
 }

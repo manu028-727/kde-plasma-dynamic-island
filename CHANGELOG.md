@@ -2,6 +2,20 @@
 
 All notable user-facing changes should be documented here.
 
+## 0.3.1
+
+- Added concrete first-fit placement when adding control center modules by clicking them in the edit palette.
+- Improved edit-mode drag placement so tiles reserve the hovered row-major position and displaced tiles move to the next available spot instead of jumping around the grid.
+- Fixed wide dragged tiles missing their target when partially overlapping a taller tile.
+- Simplified the network list tile into a cleaner connection summary and removed the Wi-Fi signal background fill.
+- Fixed network connection indicators and Wi-Fi signal values using active interfaces instead of enabled radios or nearby access points.
+- Matched network addresses to their connection, excluded loopback addresses, and added IPv6 address fallback.
+- Made network parsing independent of the system language and preserved escaped connection names as plain text.
+- Improved narrow network tile headers and disabled their action buttons while editing the layout.
+- Hardened progress rendering and activity provider selection against transient invalid runtime data.
+- Prevented missing artwork from producing null image URL warnings at startup.
+- Made notification dismiss actions respect Plasma's closable state before closing rows.
+
 ## 0.3.0
 
 ### Activity pills
