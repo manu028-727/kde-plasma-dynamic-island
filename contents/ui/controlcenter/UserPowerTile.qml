@@ -17,6 +17,8 @@ Item {
     readonly property real buttonSize: Math.max(22, Math.min(compact ? 30 : 34, width - pad * 2, height - pad * 2))
 
     anchors.fill: parent
+    Accessible.role: Accessible.Grouping
+    Accessible.name: (app.systemUsername || i18n("User")) + ". " + (app.systemHostname || i18n("KDE Plasma"))
 
     Rectangle {
         id: profileAvatarFrame
@@ -71,7 +73,7 @@ Item {
 
         PlasmaLabel {
             width: parent.width
-            text: app.systemUsername || "User"
+            text: app.systemUsername || i18n("User")
             color: "#f8f8fb"
             font.pixelSize: userPowerContent.shortTile ? 10 : userPowerContent.compact ? 11 : 13
             font.weight: Font.Bold
@@ -82,7 +84,7 @@ Item {
         PlasmaLabel {
             visible: !userPowerContent.compact || userPowerContent.height >= 34
             width: parent.width
-            text: app.systemHostname || "KDE Plasma"
+            text: app.systemHostname || i18n("KDE Plasma")
             color: "#8f9099"
             font.pixelSize: userPowerContent.shortTile ? 8 : userPowerContent.compact ? 9 : 10
             elide: Text.ElideRight
@@ -99,17 +101,24 @@ Item {
         visible: !userPowerContent.shortTile && (!userPowerContent.narrow || parent.height >= profileAvatarFrame.height + height + userPowerContent.pad * 3)
         iconName: "system-shutdown"
         compact: true
+        tooltipText: i18n("Power options")
         onClicked: powerMenu.open()
 
         QQC2.Menu {
             id: powerMenu
-            PlasmaMenuItem { text: "Lock"; icon.name: "system-lock-screen"; onTriggered: app.runPowerAction("lock") }
-            PlasmaMenuItem { text: "Logout"; icon.name: "system-log-out"; onTriggered: app.runPowerAction("logout") }
-            PlasmaMenuItem { text: "Sleep"; icon.name: "system-suspend"; onTriggered: app.runPowerAction("sleep") }
-            PlasmaMenuItem { text: "Hibernate"; icon.name: "system-suspend-hibernate"; onTriggered: app.runPowerAction("hibernate") }
+            onAboutToShow: app.popupMenuOpen = true
+            onAboutToHide: {
+                app.popupMenuOpen = false;
+                if (app.dialogVisible)
+                    app.focusIslandDialog();
+            }
+            PlasmaMenuItem { text: i18n("Lock"); icon.name: "system-lock-screen"; onTriggered: app.runPowerAction("lock") }
+            PlasmaMenuItem { text: i18n("Logout"); icon.name: "system-log-out"; onTriggered: app.runPowerAction("logout") }
+            PlasmaMenuItem { text: i18n("Sleep"); icon.name: "system-suspend"; onTriggered: app.runPowerAction("sleep") }
+            PlasmaMenuItem { text: i18n("Hibernate"); icon.name: "system-suspend-hibernate"; onTriggered: app.runPowerAction("hibernate") }
             QQC2.MenuSeparator {}
-            PlasmaMenuItem { text: "Reboot"; icon.name: "system-reboot"; onTriggered: app.runPowerAction("reboot") }
-            PlasmaMenuItem { text: "Shutdown"; icon.name: "system-shutdown"; onTriggered: app.runPowerAction("shutdown") }
+            PlasmaMenuItem { text: i18n("Reboot"); icon.name: "system-reboot"; onTriggered: app.runPowerAction("reboot") }
+            PlasmaMenuItem { text: i18n("Shutdown"); icon.name: "system-shutdown"; onTriggered: app.runPowerAction("shutdown") }
         }
     }
 
@@ -119,10 +128,10 @@ Item {
         y: parent.height - height - userPowerContent.pad
         spacing: 7
 
-        IslandButton { width: 28; height: 28; iconName: "system-lock-screen"; compact: true; onClicked: app.runPowerAction("lock") }
-        IslandButton { width: 28; height: 28; iconName: "system-suspend"; compact: true; onClicked: app.runPowerAction("sleep") }
-        IslandButton { width: 28; height: 28; iconName: "preferences-desktop-theme-global"; compact: true; onClicked: app.launchAppearanceSettings() }
-        IslandButton { width: 28; height: 28; iconName: "systemsettings"; compact: true; onClicked: app.launchSystemSettings() }
+        IslandButton { width: 28; height: 28; iconName: "system-lock-screen"; compact: true; tooltipText: i18n("Lock"); onClicked: app.runPowerAction("lock") }
+        IslandButton { width: 28; height: 28; iconName: "system-suspend"; compact: true; tooltipText: i18n("Sleep"); onClicked: app.runPowerAction("sleep") }
+        IslandButton { width: 28; height: 28; iconName: "preferences-desktop-theme-global"; compact: true; tooltipText: i18n("Appearance"); onClicked: app.launchAppearanceSettings() }
+        IslandButton { width: 28; height: 28; iconName: "systemsettings"; compact: true; tooltipText: i18n("System Settings"); onClicked: app.launchSystemSettings() }
     }
 }
 

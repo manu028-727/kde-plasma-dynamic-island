@@ -16,13 +16,22 @@ MouseArea {
     anchors.fill: parent
     hoverEnabled: true
     enabled: !app.controlEditMode
+    activeFocusOnTab: enabled
+    Accessible.role: Accessible.Button
+    Accessible.name: networkList.networkStatus.title + " " + networkList.networkStatus.summary
+    Accessible.description: networkList.networkStatus.detail
+    Accessible.onPressAction: app.launchNetworkSettings()
+    Keys.onSpacePressed: app.launchNetworkSettings()
+    Keys.onReturnPressed: app.launchNetworkSettings()
+    Keys.onEnterPressed: app.launchNetworkSettings()
+    onPressed: networkList.forceActiveFocus()
     onClicked: app.launchNetworkSettings()
 
     Rectangle {
         anchors.fill: parent
         radius: Math.min(18, Math.min(width, height) / 2)
         color: networkList.pressed ? "#242630" : networkList.containsMouse ? "#1a1b24" : networkList.networkStatus.connected ? "#171821" : "#15161d"
-        border.color: networkList.networkStatus.connected && !networkList.iconOnly ? Qt.rgba(0.35, 0.78, 0.98, 0.36) : "#2a2b35"
+        border.color: networkList.activeFocus ? "#8e8eff" : networkList.networkStatus.connected && !networkList.iconOnly ? Qt.rgba(0.35, 0.78, 0.98, 0.36) : "#2a2b35"
         border.width: 1
     }
 
@@ -63,7 +72,7 @@ MouseArea {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 iconName: "view-refresh"
-                tooltipText: "Refresh network status"
+                tooltipText: typeof i18n === "function" ? i18n("Refresh network status") : "Refresh network status"
                 compact: true
                 onClicked: networkList.app.refreshWifiNetworks()
             }
@@ -73,7 +82,7 @@ MouseArea {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 iconName: "settings"
-                tooltipText: "Network settings"
+                tooltipText: typeof i18n === "function" ? i18n("Network settings") : "Network settings"
                 compact: true
                 onClicked: networkList.app.launchNetworkSettings()
             }
@@ -141,7 +150,7 @@ MouseArea {
     QQC2.ToolTip {
         id: networkToolTip
 
-        visible: networkList.containsMouse
+        visible: networkList.containsMouse || networkList.activeFocus
         text: networkList.networkStatus.detail
         delay: 350
         contentItem: PlasmaLabel {

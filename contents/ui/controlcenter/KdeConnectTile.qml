@@ -28,13 +28,22 @@ MouseArea {
     anchors.fill: parent
     hoverEnabled: true
     enabled: !app.controlEditMode
+    activeFocusOnTab: enabled
+    Accessible.role: Accessible.Button
+    Accessible.name: "KDE Connect"
+    Accessible.description: app.kdeConnectSummary()
+    Accessible.onPressAction: app.launchKdeConnectSettings()
+    Keys.onSpacePressed: app.launchKdeConnectSettings()
+    Keys.onReturnPressed: app.launchKdeConnectSettings()
+    Keys.onEnterPressed: app.launchKdeConnectSettings()
+    onPressed: kdeTile.forceActiveFocus()
     onClicked: app.launchKdeConnectSettings()
 
     Rectangle {
         anchors.fill: parent
         radius: Math.min(18, Math.min(width, height) / 2)
         color: kdeTile.pressed ? "#242630" : kdeTile.containsMouse ? "#1a1b24" : kdeTile.hasDevices ? "#171821" : "#15161d"
-        border.color: kdeTile.hasDevices && !kdeTile.iconOnly ? Qt.rgba(0.35, 0.78, 0.98, 0.42) : "#2a2b35"
+        border.color: kdeTile.activeFocus ? "#8e8eff" : kdeTile.hasDevices && !kdeTile.iconOnly ? Qt.rgba(0.35, 0.78, 0.98, 0.42) : "#2a2b35"
         border.width: 1
     }
 
@@ -61,7 +70,7 @@ MouseArea {
 
                 PlasmaLabel {
                     Layout.fillWidth: true
-                    text: "KDE Connect"
+                    text: i18n("KDE Connect")
                     color: "#f8f8fb"
                     font.pixelSize: 11
                     font.weight: Font.Bold
@@ -71,7 +80,7 @@ MouseArea {
 
                 PlasmaLabel {
                     Layout.fillWidth: true
-                    text: kdeTile.reachableDevices > 0 ? kdeTile.reachableDevices + " reachable" : app.kdeConnectSummary()
+                    text: kdeTile.reachableDevices > 0 ? i18np("%1 reachable device", "%1 reachable devices", kdeTile.reachableDevices) : app.kdeConnectSummary()
                     color: "#8f9099"
                     font.pixelSize: 9
                     elide: Text.ElideRight
@@ -83,7 +92,7 @@ MouseArea {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 iconName: "view-refresh"
-                tooltipText: "Refresh devices"
+                tooltipText: i18n("Refresh devices")
                 compact: true
                 onClicked: app.refreshKdeConnectDevices()
             }
@@ -93,7 +102,7 @@ MouseArea {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 iconName: "settings"
-                tooltipText: "Open KDE Connect"
+                tooltipText: i18n("Open KDE Connect")
                 compact: true
                 onClicked: app.launchKdeConnectSettings()
             }
@@ -128,7 +137,7 @@ MouseArea {
 
                         PlasmaLabel {
                             Layout.fillWidth: true
-                            text: kdeTile.deviceText(modelData, "name", "Device")
+                            text: kdeTile.deviceText(modelData, "name", i18n("Device"))
                             color: "#f4f4f8"
                             font.pixelSize: 10
                             font.weight: Font.Bold
@@ -139,7 +148,7 @@ MouseArea {
                         PlasmaLabel {
                             visible: kdeTile.detailed
                             Layout.fillWidth: true
-                            text: kdeTile.deviceText(modelData, "status", "available")
+                            text: kdeTile.deviceText(modelData, "status", i18n("available"))
                             color: "#8f9099"
                             font.pixelSize: 9
                             elide: Text.ElideRight
@@ -155,7 +164,7 @@ MouseArea {
                             width: 22
                             height: 22
                             iconName: "dialog-information"
-                            tooltipText: "Ping device"
+                            tooltipText: i18n("Ping device")
                             compact: true
                             onClicked: app.runKdeConnectDeviceAction(kdeTile.deviceText(modelData, "id", ""), "ping")
                         }
@@ -164,7 +173,7 @@ MouseArea {
                             width: 22
                             height: 22
                             iconName: "notifications"
-                            tooltipText: "Ring device"
+                            tooltipText: i18n("Ring device")
                             compact: true
                             onClicked: app.runKdeConnectDeviceAction(kdeTile.deviceText(modelData, "id", ""), "ring")
                         }
@@ -174,7 +183,7 @@ MouseArea {
                             width: 22
                             height: 22
                             iconName: "folder"
-                            tooltipText: "Mount files"
+                            tooltipText: i18n("Mount files")
                             compact: true
                             onClicked: app.runKdeConnectDeviceAction(kdeTile.deviceText(modelData, "id", ""), "mount")
                         }
@@ -187,7 +196,7 @@ MouseArea {
             visible: !kdeTile.hasDevices
             Layout.fillWidth: true
             Layout.fillHeight: true
-            text: "No devices found"
+            text: i18n("No devices found")
             color: "#777884"
             font.pixelSize: 10
             horizontalAlignment: Text.AlignHCenter
@@ -197,7 +206,7 @@ MouseArea {
         PlasmaLabel {
             visible: kdeTile.hasDevices && kdeTile.totalDevices > kdeTile.visibleDeviceCount
             Layout.fillWidth: true
-            text: "+" + (kdeTile.totalDevices - kdeTile.visibleDeviceCount) + " more"
+            text: i18n("+%1 more", kdeTile.totalDevices - kdeTile.visibleDeviceCount)
             color: "#777884"
             font.pixelSize: 9
             horizontalAlignment: Text.AlignRight
@@ -224,7 +233,7 @@ MouseArea {
         color: kdeTile.reachableDevices > 0 ? "#34c759" : "#8e8eff"
     }
 
-    QQC2.ToolTip.visible: kdeTile.containsMouse
-    QQC2.ToolTip.text: kdeTile.hasDevices ? app.kdeConnectSummary() : "No reachable KDE Connect devices"
+    QQC2.ToolTip.visible: kdeTile.containsMouse || kdeTile.activeFocus
+    QQC2.ToolTip.text: kdeTile.hasDevices ? app.kdeConnectSummary() : i18n("No reachable KDE Connect devices")
     QQC2.ToolTip.delay: 350
 }

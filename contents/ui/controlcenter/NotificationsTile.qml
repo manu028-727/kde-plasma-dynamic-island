@@ -29,6 +29,9 @@ Item {
     }
 
     anchors.fill: parent
+    activeFocusOnTab: false
+    Accessible.role: Accessible.Grouping
+    Accessible.name: i18n("Notifications")
 
     ColumnLayout {
         visible: !notificationsContent.iconOnly
@@ -53,7 +56,7 @@ Item {
 
                 PlasmaLabel {
                     Layout.fillWidth: true
-                    text: "Notifications"
+                    text: i18n("Notifications")
                     color: "#f8f8fb"
                     font.pixelSize: 12
                     font.weight: Font.Bold
@@ -76,7 +79,7 @@ Item {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 iconName: "edit-clear-all"
-                tooltipText: "Clear notifications"
+                tooltipText: i18n("Clear notifications")
                 compact: true
                 enabled: notificationsContent.notificationTotal > 0
                 onClicked: app.clearNotifications()
@@ -87,7 +90,7 @@ Item {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 iconName: "settings"
-                tooltipText: "Notification settings"
+                tooltipText: i18n("Notification settings")
                 compact: true
                 onClicked: app.launchNotificationSettings()
             }
@@ -103,13 +106,22 @@ Item {
                 Layout.preferredHeight: notificationsContent.rowHeight
                 hoverEnabled: true
                 enabled: !app.controlEditMode
+                activeFocusOnTab: enabled
+                Accessible.role: Accessible.Button
+                Accessible.name: app.notificationTitle(modelData)
+                Accessible.description: app.notificationAppName(modelData)
+                Accessible.onPressAction: app.openNotification(modelData)
+                Keys.onSpacePressed: app.openNotification(modelData)
+                Keys.onReturnPressed: app.openNotification(modelData)
+                Keys.onEnterPressed: app.openNotification(modelData)
+                onPressed: rowArea.forceActiveFocus()
                 onClicked: app.openNotification(modelData)
 
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
                     color: rowArea.pressed ? "#242630" : rowArea.containsMouse ? "#1a1b24" : "#11121a"
-                    border.color: rowArea.containsMouse ? "#343542" : "#242631"
+                    border.color: rowArea.activeFocus ? "#8e8eff" : rowArea.containsMouse ? "#343542" : "#242631"
                     border.width: 1
                 }
 
@@ -177,7 +189,7 @@ Item {
                         Layout.preferredWidth: 24
                         Layout.preferredHeight: 24
                         iconName: "window-close"
-                        tooltipText: "Dismiss"
+                        tooltipText: i18n("Dismiss")
                         compact: true
                         enabled: app.rowValue(modelData, NotificationManager.Notifications.ClosableRole, true)
                         onClicked: notificationsContent.closeRow(modelData)
@@ -190,7 +202,7 @@ Item {
             visible: notificationsContent.notificationTotal <= 0
             Layout.fillWidth: true
             Layout.fillHeight: true
-            text: "Quiet"
+            text: i18n("Quiet")
             color: "#777884"
             font.pixelSize: 10
             horizontalAlignment: Text.AlignHCenter
@@ -200,7 +212,7 @@ Item {
         PlasmaLabel {
             visible: notificationsContent.notificationTotal > 0 && notificationsContent.overflowCount > 0
             Layout.fillWidth: true
-            text: "+" + notificationsContent.overflowCount + " more"
+            text: i18n("+%1 more", notificationsContent.overflowCount)
             color: "#777884"
             font.pixelSize: 9
             horizontalAlignment: Text.AlignRight

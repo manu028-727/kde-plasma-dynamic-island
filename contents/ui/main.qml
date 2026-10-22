@@ -16,6 +16,7 @@ import org.kde.plasma.workspace.keyboardlayout as KeyboardLayout
 import "controlcenter"
 import "controlcenter/ModuleRegistry.js" as ModuleRegistry
 import "controlcenter/NetworkState.js" as NetworkState
+import "TextUtils.js" as TextUtils
 import "activities" as Activities
 
 PlasmoidItem {
@@ -64,6 +65,8 @@ PlasmoidItem {
     property bool islandOpen: false
     property bool panelHidden: false
     property bool popupAcceptsFocus: false
+    property bool popupMenuOpen: false
+    property bool dialogActive: false
     property real popupCollapsedX: (popupWidth - realIslandWidth) / 2
     property real popupCollapsedY: islandExpandsUp ? popupHeight - realIslandHeight : islandExpandsDown ? 0 : (popupHeight - realIslandHeight) / 2
     property bool controlEditMode: false
@@ -187,7 +190,11 @@ PlasmoidItem {
         openHandoffTimer.stop();
         activityPopupTimer.stop();
         popupMode = mode;
-        popupAcceptsFocus = false;
+        if (!wasOpen) {
+            popupAcceptsFocus = false;
+            popupMenuOpen = false;
+            dialogActive = false;
+        }
         expanded = false;
         dialogVisible = true;
         Qt.callLater(positionIslandDialog);
@@ -213,6 +220,7 @@ PlasmoidItem {
         activityPopupTimer.stop();
         openHandoffTimer.stop();
         popupAcceptsFocus = false;
+        popupMenuOpen = false;
         resetControlInteractionState();
         if (!panelHidden && !islandOpen) {
             dialogVisible = false;
@@ -220,6 +228,12 @@ PlasmoidItem {
         }
         islandOpen = false;
         closeDialogTimer.restart();
+    }
+
+    function focusIslandDialog() {
+        popupAcceptsFocus = true;
+        if (islandDialog.requestActivate)
+            islandDialog.requestActivate();
     }
 
     function bump(kind) {
@@ -248,6 +262,7 @@ PlasmoidItem {
         root.refreshSystemState();
         root.ensureControlLayout();
         openIsland("control", false);
+        Qt.callLater(root.focusIslandDialog);
     }
 
     function toggleActivityPopup(autoClose) {
@@ -309,7 +324,7 @@ PlasmoidItem {
             return appName;
 
         const desktopEntry = cleanText(rowValue(row, NotificationManager.Notifications.DesktopEntryRole, ""));
-        return desktopEntry.length > 0 ? desktopEntry : "Notification";
+        return desktopEntry.length > 0 ? desktopEntry : i18n("Notification");
     }
 
     function notificationTitle(row) {
@@ -318,10 +333,7 @@ PlasmoidItem {
     }
 
     function notificationBody(row) {
-        const body = notificationPlainText(rowValue(row, NotificationManager.Notifications.BodyRole, ""));
-        if (body.length <= notificationBodyCharacters)
-            return body;
-        return body.slice(0, Math.max(1, notificationBodyCharacters - 1)).trimEnd() + "…";
+        return TextUtils.truncate(notificationPlainText(rowValue(row, NotificationManager.Notifications.BodyRole, "")), notificationBodyCharacters);
     }
 
     function notificationAppIcon(row) {
@@ -384,10 +396,10 @@ PlasmoidItem {
     function notificationStatusText() {
         const count = notificationCount();
         if (count <= 0)
-            return "Quiet";
+            return i18n("Quiet");
         if (count === 1)
-            return "1 notification";
-        return count + " notifications";
+            return i18n("1 notification");
+        return i18np("%1 notification", "%1 notifications", count);
     }
 
     function notificationOverflowCount(limit) {
@@ -434,26 +446,11 @@ PlasmoidItem {
     }
 
     function cleanText(text) {
-        return String(text || "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+        return TextUtils.cleanText(text);
     }
 
     function notificationPlainText(text) {
-        return String(text || "")
-            .replace(/<br\s*\/?\s*>/gi, "\n")
-            .replace(/<\/(p|div|li)\s*>/gi, "\n")
-            .replace(/<li(?:\s[^>]*)?>/gi, "• ")
-            .replace(/<[^>]*>/g, "")
-            .replace(/&nbsp;/gi, " ")
-            .replace(/&amp;/gi, "&")
-            .replace(/&lt;/gi, "<")
-            .replace(/&gt;/gi, ">")
-            .replace(/&quot;/gi, "\"")
-            .replace(/&#39;|&apos;/gi, "'")
-            .replace(/\r\n?/g, "\n")
-            .replace(/[\t\f\v ]+/g, " ")
-            .replace(/ *\n */g, "\n")
-            .replace(/\n{3,}/g, "\n\n")
-            .trim();
+        return TextUtils.plainText(text);
     }
 
     function hasVisualValue(value) {
@@ -637,7 +634,7 @@ PlasmoidItem {
     function jobTitle(row) {
         const details = jobDetails(row);
         const title = cleanText(details && details.summary ? details.summary : rowValue(row, NotificationManager.Notifications.SummaryRole, ""));
-        return title.length > 0 ? title : "Working";
+        return title.length > 0 ? title : i18n("Working");
     }
 
     function jobText(row) {
@@ -716,15 +713,15 @@ PlasmoidItem {
     function jobDetailsText(row) {
         const details = jobDetails(row);
         if (!details)
-            return jobIsSuspended(row) ? "Paused" : "";
+            return jobIsSuspended(row) ? i18n("Paused") : "";
         if (jobIsSuspended(row))
-            return "Paused";
+            return i18n("Paused");
         if (finiteNumber(details.speed, 0) > 0)
             return formatByteSize(details.speed) + "/s";
         const processed = finiteNumber(details.processedBytes, 0);
         const total = finiteNumber(details.totalBytes, 0);
         if (total > 0)
-            return formatByteSize(processed) + " of " + formatByteSize(total);
+            return i18n("%1 of %2", formatByteSize(processed), formatByteSize(total));
         return cleanText(details.applicationName || "");
     }
 
@@ -738,7 +735,7 @@ PlasmoidItem {
 
     function primaryTextFor(kind) {
         const provider = activityController.providerFor(kind || "auto");
-        return provider && provider.title.length > 0 ? provider.title : "Control Center";
+        return provider && provider.title.length > 0 ? provider.title : i18n("Control Center");
     }
 
     function primaryText() {
@@ -747,7 +744,7 @@ PlasmoidItem {
 
     function secondaryTextFor(kind) {
         const provider = activityController.providerFor(kind || "auto");
-        return provider ? provider.subtitle : "Brightness, audio, network, power";
+        return provider ? provider.subtitle : i18n("Brightness, audio, network, power");
     }
 
     function secondaryText() {
@@ -894,7 +891,7 @@ PlasmoidItem {
         if (!sink)
             return ;
 
-        const percent = clampNumber(value, 0, 100);
+        const percent = clampNumber(value, 0, 150);
         sink.muted = false;
         sink.volume = Math.round(PulseAudio.NormalVolume * percent / 100);
     }
@@ -1048,6 +1045,7 @@ PlasmoidItem {
     }
 
     function sanitizeControlLayout(layout) {
+        const maxRows = 64;
         const known = {};
         for (let i = 0; i < controlModules.length; ++i)
             known[controlModules[i].id] = true;
@@ -1071,7 +1069,7 @@ PlasmoidItem {
             };
             if (col >= 0 && row >= 0) {
                 saved.col = Math.min(8 - size.w, col);
-                saved.row = row;
+                saved.row = Math.min(maxRows - size.h, row);
             }
             seen[item.id] = true;
             out.push(saved);
@@ -1187,8 +1185,8 @@ PlasmoidItem {
 
     function wifiTitle() {
         if (!enabledConnections.wirelessHwEnabled)
-            return "Unavailable";
-        return enabledConnections.wirelessEnabled ? "On" : "Off";
+            return i18n("Unavailable");
+        return enabledConnections.wirelessEnabled ? i18n("On") : i18n("Off");
     }
 
     function wifiPrimaryNetwork() {
@@ -1207,11 +1205,8 @@ PlasmoidItem {
             if (line.length <= 0)
                 continue;
 
-            const parts = line.split(" ");
+            const parts = line.split(/\s+/);
             out.push(parts.length > 2 ? parts.slice(2).join(" ") : line);
-            if (out.length >= 3)
-                break;
-
         }
         return out.join("\n");
     }
@@ -1243,23 +1238,23 @@ PlasmoidItem {
 
     function bluetoothSummary() {
         if (!bluetoothAvailable)
-            return "No adapter";
+            return i18n("No adapter");
         if (!bluetoothPowered)
-            return "Off";
+            return i18n("Off");
         const count = bluetoothDeviceCount();
         if (count <= 0)
-            return "On";
-        return count === 1 ? bluetoothDevicesText.split("\n")[0] : count + " devices";
+            return i18n("On");
+        return count === 1 ? bluetoothDevicesText.split("\n")[0] : i18np("%1 device", "%1 devices", count);
     }
 
     function bluetoothDetail() {
         if (!bluetoothAvailable)
-            return "Bluetooth adapter unavailable";
+            return i18n("Bluetooth adapter unavailable");
         if (!bluetoothPowered)
-            return "Radio disabled";
+            return i18n("Radio disabled");
         if (bluetoothDevicesText.length > 0)
             return bluetoothDevicesText;
-        return bluetoothAdapterName.length > 0 ? bluetoothAdapterName : "No connected devices";
+        return bluetoothAdapterName.length > 0 ? bluetoothAdapterName : i18n("No connected devices");
     }
 
     function parseKdeConnectDevices(text) {
@@ -1268,13 +1263,15 @@ PlasmoidItem {
         const seen = {};
         for (let i = 0; i < lines.length; ++i) {
             const device = parseKdeConnectDeviceLine(lines[i]);
-            if (!device || device.name.length <= 0 || seen[device.name])
+            if (!device || device.name.length <= 0)
                 continue;
 
-            seen[device.name] = true;
+            const key = device.id.length > 0 ? device.id : device.name;
+            if (seen[key])
+                continue;
+
+            seen[key] = true;
             out.push(device.name + "|" + device.id + "|" + device.status + "|" + (device.reachable ? "1" : "0") + "|" + (device.paired ? "1" : "0"));
-            if (out.length >= 3)
-                break;
         }
         return out.join("\n");
     }
@@ -1321,14 +1318,16 @@ PlasmoidItem {
 
     function kdeConnectSummary() {
         if (kdeConnectDevicesText.length <= 0)
-            return "No devices";
+            return i18n("No devices");
         const devices = kdeConnectDevices(0);
         const reachable = kdeConnectReachableCount();
+        if (devices.length <= 0)
+            return i18n("No devices");
         if (devices.length === 1)
             return devices[0].name;
         if (reachable > 0)
-            return reachable + " reachable";
-        return devices.length + " paired";
+            return i18np("%1 reachable device", "%1 reachable devices", reachable);
+        return i18np("%1 paired device", "%1 paired devices", devices.length);
     }
 
     function kdeConnectRows(limit) {
@@ -1506,15 +1505,15 @@ PlasmoidItem {
 
     function powerProfileTitle() {
         if (powerProfiles.activeProfile === "performance")
-            return "Performance";
+            return i18n("Performance");
         if (powerProfiles.activeProfile === "power-saver")
-            return "Saver";
-        return "Balanced";
+            return i18n("Saver");
+        return i18n("Balanced");
     }
 
     function batteryText() {
         if (!batteryControl.hasInternalBatteries)
-            return batteryControl.pluggedIn ? "AC" : "Power";
+            return batteryControl.pluggedIn ? i18n("AC") : i18n("Power");
 
         return batteryControl.percent + "%";
     }
@@ -1529,7 +1528,7 @@ PlasmoidItem {
     switchHeight: islandHeight
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     Plasmoid.status: hasActivity ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
-    Plasmoid.title: ""
+    Plasmoid.title: i18n("Dynamic Island")
     toolTipMainText: primaryText()
     toolTipSubText: secondaryText()
     compactRepresentation: islandComponent
@@ -1552,7 +1551,7 @@ PlasmoidItem {
         // popup times out or is hidden. Closing it here still calls close().
         showExpired: true
         showDismissed: true
-        sortMode: NotificationManager.Notifications.SortByTypeAndUrgency
+        sortMode: NotificationManager.Notifications.SortByDate
         sortOrder: Qt.DescendingOrder
         groupMode: NotificationManager.Notifications.GroupDisabled
     }
@@ -1633,8 +1632,8 @@ PlasmoidItem {
                 key: "idle"
                 active: true
                 priority: 0
-                title: "Control Center"
-                subtitle: "Brightness, audio, network, power"
+                title: i18n("Control Center")
+                subtitle: i18n("Brightness, audio, network, power")
                 autoCloseMs: root.ongoingPopupDurationMs
                 visualComponent: idleVisualComponent
                 expandedComponent: activityPage
@@ -1919,10 +1918,12 @@ PlasmoidItem {
                 root.closeIsland();
             else if (root.dialogVisible)
                 root.closeIsland();
-            else if (root.hasActivity)
+            else if (root.hasActivity) {
                 root.showActivityPopup(false);
-            else
+                Qt.callLater(root.focusIslandDialog);
+            } else {
                 root.showControlCenter();
+            }
         }
     }
 
@@ -1938,9 +1939,11 @@ PlasmoidItem {
     }
 
     Timer {
+        // Connectivity is only shown in the control center. Avoid running
+        // subprocesses in the background while the island is idle.
         interval: 30000
         repeat: true
-        running: true
+        running: root.dialogVisible && root.popupMode === "control"
         triggeredOnStart: false
         onTriggered: root.refreshConnectivityState()
     }
@@ -1964,11 +1967,23 @@ PlasmoidItem {
         hideOnWindowDeactivate: false
         visible: root.dialogVisible
         onVisibleChanged: {
-            if (visible)
+            if (visible) {
                 Qt.callLater(root.positionIslandDialog);
-            else
+            } else {
                 root.popupAcceptsFocus = false;
-
+                root.popupMenuOpen = false;
+                root.dialogActive = false;
+            }
+        }
+        onActiveChanged: {
+            if (active) {
+                root.dialogActive = true;
+                return;
+            }
+            const shouldClose = root.dialogActive && root.dialogVisible && root.islandOpen && !root.popupMenuOpen;
+            root.dialogActive = false;
+            if (shouldClose)
+                root.closeIsland();
         }
         onWidthChanged: root.positionIslandDialog()
         onHeightChanged: root.positionIslandDialog()
@@ -2167,6 +2182,10 @@ PlasmoidItem {
                 anchors.fill: parent
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                Accessible.role: Accessible.Button
+                Accessible.name: i18n("Dynamic Island")
+                Accessible.description: root.primaryText() + ". " + root.secondaryText()
+                Accessible.onPressAction: root.toggleControlCenter()
                 onClicked: (mouse) => {
                     root.clickButton = mouse.button;
                     clickTimer.restart();
@@ -2296,6 +2315,9 @@ PlasmoidItem {
             hoverEnabled: true
             focus: root.popupAcceptsFocus
             acceptedButtons: Qt.LeftButton
+            Accessible.role: Accessible.Grouping
+            Accessible.name: i18n("Dynamic Island")
+            Accessible.description: root.primaryText() + ". " + root.secondaryText()
             Keys.onPressed: (event) => {
                 if (event.key !== Qt.Key_Escape)
                     return ;
@@ -2310,13 +2332,13 @@ PlasmoidItem {
                 event.accepted = true;
             }
             onEntered: {
+                // Allow the popup to receive keyboard focus without stealing it
+                // from the active window just because the pointer passed over it.
                 root.popupAcceptsFocus = true;
-                if (islandDialog.requestActivate)
-                    islandDialog.requestActivate();
-
             }
             onExited: {
-                root.popupAcceptsFocus = false;
+                if (!root.dialogActive)
+                    root.popupAcceptsFocus = false;
             }
             onClicked: (mouse) => {
                 root.closeIsland();
@@ -2448,7 +2470,7 @@ PlasmoidItem {
                     glyphSize: 32
                     mode: root.popupActivityMode()
                     progress: root.activityProgressValue(root.popupActivityMode()) / Math.max(1, root.activityProgressTo(root.popupActivityMode()))
-                    playing: root.popupActivityMode() === "media" ? root.isPlaying : root.popupActivityMode() === "job"
+                    playing: root.popupActivityMode() === "media" ? root.isPlaying : root.popupActivityMode() === "job" ? !root.jobIsSuspended(root.activeJobRow()) : false
                 }
 
             }
@@ -2495,6 +2517,7 @@ PlasmoidItem {
                 IslandButton {
                     iconName: "media-skip-backward"
                     compact: true
+                    tooltipText: i18n("Previous")
                     enabled: root.player && root.player.canGoPrevious
                     onClicked: root.mediaPrevious()
                 }
@@ -2503,6 +2526,7 @@ PlasmoidItem {
                     iconName: root.isPlaying ? "media-playback-pause" : "media-playback-start"
                     compact: true
                     emphasized: true
+                    tooltipText: root.isPlaying ? i18n("Pause") : i18n("Play")
                     enabled: root.player && (root.player.canPlay || root.player.canPause)
                     onClicked: root.mediaPlayPause()
                 }
@@ -2510,6 +2534,7 @@ PlasmoidItem {
                 IslandButton {
                     iconName: "media-skip-forward"
                     compact: true
+                    tooltipText: i18n("Next")
                     enabled: root.player && root.player.canGoNext
                     onClicked: root.mediaNext()
                 }

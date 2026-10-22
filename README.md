@@ -14,6 +14,7 @@
   <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/stargazers"><img src="https://img.shields.io/github/stars/manu028-727/kde-plasma-dynamic-island?style=flat-square" alt="GitHub stars"></a>
   <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/issues"><img src="https://img.shields.io/github/issues/manu028-727/kde-plasma-dynamic-island?style=flat-square" alt="Open issues"></a>
   <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/commits/main"><img src="https://img.shields.io/github/last-commit/manu028-727/kde-plasma-dynamic-island?style=flat-square" alt="Last commit"></a>
+  <a href="https://github.com/manu028-727/kde-plasma-dynamic-island/actions/workflows/ci.yml"><img src="https://github.com/manu028-727/kde-plasma-dynamic-island/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="https://doc.qt.io/qt-6/qmlapplications.html"><img src="https://img.shields.io/badge/built%20with-QML-41cd52?style=flat-square&logo=qt&logoColor=white" alt="Built with QML"></a>
 </p>
 
@@ -30,7 +31,7 @@ This package is in alpha state. It is usable, but bugs, visual glitches, missing
 - Plasma notification integration with app icons, images and thumbnails, multi-line previews, an animated unread indicator, and retained notification history.
 - Job/download activity progress with status details and pause/resume/cancel when the source job supports it.
 - Full-name keyboard-layout switch announcements in an expanded pill.
-- Compact textless panel pill with black glass styling, masked album art, and quick pulse feedback for new activity.
+- Compact panel pill with black glass styling, masked artwork, and concise live activity text that expands into the activity or control-center views.
 - New activity opens a temporary floating activity popup for a configurable duration.
 - Single-click idle opens the control center popup; single-click during activity reopens the activity popup; double-click opens control center.
 - Middle-click toggles media playback.
@@ -104,6 +105,37 @@ If you edit the preset, upgrade it with:
 kpackagetool6 --type Plasma/LayoutTemplate --upgrade extras/layout-template/com.manu028.dynamicisland.panel
 ```
 
+## Development and testing
+
+The JavaScript parser and text helpers have Node tests that do not need a running Plasma session:
+
+```bash
+node tests/network-state.test.cjs
+node tests/text-utils.test.cjs
+```
+
+QML syntax can be checked with Qt's `qmllint` when the Qt 6 declarative tools are installed:
+
+```bash
+qmllint contents/ui/*.qml contents/ui/*.js \
+  contents/ui/activities/*.qml \
+  contents/ui/controlcenter/*.qml contents/ui/controlcenter/*.js
+```
+
+Build the installable archive with the same script used by CI:
+
+```bash
+scripts/package.sh
+```
+
+The QML test can be run on a Plasma 6 system with `qmltestrunner`:
+
+```bash
+qmltestrunner -input tests/tst_NetworkListTile.qml
+```
+
+CI runs the Node tests, linting, and package validation on pushes and pull requests. Releases are built from `v*` tags; the numeric part of the tag must match `KPlugin.Version` in `metadata.json` (for example, `v0.3.2-alpha` matches version `0.3.2`). Tags containing a suffix such as `-alpha` are published as prereleases.
+
 ## Releases
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
@@ -135,10 +167,10 @@ The control center layout is stored in Plasma configuration as JSON and is reset
 
 Planned and possible directions for the project. Items are not guaranteed and may change.
 
-- **Maintainability** — continue splitting the remaining control and integration logic out of the monolithic `main.qml`.
-- **Localization (i18n)** — translate user-facing strings into additional languages.
-- **Accessibility** — improved keyboard navigation and screen-reader labels.
-- **Theming options** — configurable pill appearance (corner radius, width, accent color) exposed in the widget configuration.
+- **Maintainability** — continue splitting the remaining control and integration logic out of the monolithic `main.qml`. Text and notification parsing helpers are now isolated and covered by Node tests.
+- **Localization (i18n)** — user-facing QML strings now call `i18n`; translated catalogs and the remaining JavaScript-provided labels (network states and module names) still need work.
+- **Accessibility** — core controls now expose accessible names, roles, keyboard activation, and focus indicators; broader screen-reader QA is still planned.
+- **Theming options** — configurable pill appearance (corner radius, width, accent color) exposed in the widget configuration, and replacing the remaining hardcoded visual sizes with theme units.
 
 ## License
 

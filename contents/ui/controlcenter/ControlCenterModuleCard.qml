@@ -208,7 +208,7 @@ Rectangle {
         id: volumeModule
         ControlSliderTile {
             app: moduleCard.app
-            title: "Volume"
+            title: i18n("Volume")
             iconName: {
                 const sink = app.defaultSink();
                 if (!sink || app.systemVolumePercent() <= 0 || sink.muted)
@@ -217,17 +217,22 @@ Rectangle {
             }
             valueText: {
                 const sink = app.defaultSink();
-                return sink && sink.muted ? "Muted" : app.systemVolumePercent() + "%";
+                return sink && sink.muted ? i18n("Muted") : app.systemVolumePercent() + "%";
             }
-            value: Math.min(100, app.systemVolumePercent())
-            toValue: 100
+            value: app.systemVolumePercent()
+            toValue: 150
             accent: "#5ac8fa"
-            enabled: app.defaultSink() !== null
+            sliderEnabled: app.defaultSink() !== null
             actionIconName: {
                 const sink = app.defaultSink();
                 return sink && sink.muted ? "audio-volume-high" : "audio-volume-muted";
             }
+            actionTooltip: {
+                const sink = app.defaultSink();
+                return sink && sink.muted ? i18n("Unmute") : i18n("Mute");
+            }
             secondaryActionIconName: "settings"
+            secondaryActionTooltip: i18n("Audio settings")
             onActionTriggered: app.toggleSystemMute()
             onSecondaryActionTriggered: app.launchPavucontrol()
             onMoved: (value) => app.setSystemVolumePercent(value)
@@ -237,14 +242,16 @@ Rectangle {
         id: brightnessModule
         ControlSliderTile {
             app: moduleCard.app
-            title: "Brightness"
+            title: i18n("Brightness")
             iconName: value <= 1 ? "brightness-low" : value < 55 ? "brightness-medium" : "brightness-high"
             valueText: screenBrightnessSource.isBrightnessAvailable ? app.displayedScreenBrightnessPercent() + "%" : "--"
             value: app.displayedScreenBrightnessPercent()
             accent: "#f5d64a"
-            enabled: screenBrightnessSource.isBrightnessAvailable
+            sliderEnabled: screenBrightnessSource.isBrightnessAvailable
             actionIconName: "video-display"
+            actionTooltip: i18n("Display settings")
             secondaryActionIconName: keyboardBrightnessSource.isBrightnessAvailable ? "input-keyboard" : ""
+            secondaryActionTooltip: i18n("Toggle keyboard brightness")
             onActionTriggered: app.launchDisplaySettings()
             onSecondaryActionTriggered: app.setKeyboardBrightnessPercent(app.keyboardBrightnessPercent() <= 20 ? 100 : 0)
             onMoved: (value) => app.setScreenBrightnessPercent(value)
@@ -255,14 +262,14 @@ Rectangle {
         SimpleModuleTile {
             app: moduleCard.app
             iconName: connectionsSource.wirelessEnabled ? "network-wireless-on" : "network-wireless-off"
-            title: "Wi-Fi"
+            title: i18n("Wi-Fi")
             subtitle: app.wifiPrimaryNetwork()
             active: connectionsSource.wirelessEnabled
             available: connectionsSource.wirelessHwEnabled
             accent: "#0a84ff"
             progress: app.wifiSignalPercent()
             detailText: app.wifiTitle()
-            footerText: connectionsSource.wirelessHwEnabled ? (connectionsSource.wirelessEnabled ? "Click to turn off" : "Click to turn on") : "No adapter"
+            footerText: connectionsSource.wirelessHwEnabled ? (connectionsSource.wirelessEnabled ? i18n("Click to turn off") : i18n("Click to turn on")) : i18n("No adapter")
             actionIconName: "settings"
             onActionTriggered: app.launchNetworkSettings()
             onTriggered: connectionsSource.wirelessHwEnabled ? app.toggleWifi() : app.launchNetworkSettings()
@@ -276,13 +283,13 @@ Rectangle {
         SimpleModuleTile {
             app: moduleCard.app
             iconName: "preferences-system-bluetooth"
-            title: "Bluetooth"
+            title: i18n("Bluetooth")
             subtitle: app.bluetoothSummary()
             active: app.bluetoothPowered && app.bluetoothAvailable
             available: app.bluetoothAvailable
             accent: "#0a84ff"
             detailText: app.bluetoothDetail()
-            footerText: app.bluetoothAvailable ? (app.bluetoothPowered ? "Click to turn off" : "Click to turn on") : "Open settings"
+            footerText: app.bluetoothAvailable ? (app.bluetoothPowered ? i18n("Click to turn off") : i18n("Click to turn on")) : i18n("Open settings")
             actionIconName: "settings"
             onActionTriggered: app.launchBluetoothSettings()
             onTriggered: app.bluetoothAvailable ? app.toggleBluetoothPower() : app.launchBluetoothSettings()
@@ -293,13 +300,13 @@ Rectangle {
         SimpleModuleTile {
             app: moduleCard.app
             iconName: "preferences-system-bluetooth"
-            title: app.bluetoothDeviceCount() > 0 ? "Connected" : "Discover"
-            subtitle: app.bluetoothAvailable ? app.bluetoothSummary() : "No adapter"
+            title: app.bluetoothDeviceCount() > 0 ? i18n("Connected") : i18n("Discover")
+            subtitle: app.bluetoothAvailable ? app.bluetoothSummary() : i18n("No adapter")
             active: app.bluetoothPowered && app.bluetoothAvailable
             available: app.bluetoothAvailable
             accent: "#5ac8fa"
             detailText: app.bluetoothDetail()
-            footerText: app.bluetoothAvailable ? "Open Bluetooth" : "Open settings"
+            footerText: app.bluetoothAvailable ? i18n("Open Bluetooth") : i18n("Open settings")
             onTriggered: app.launchBluetoothDiscovery()
         }
     }
@@ -308,13 +315,13 @@ Rectangle {
         SimpleModuleTile {
             app: moduleCard.app
             iconName: batterySource.pluggedIn ? "battery-charging" : "battery"
-            title: batterySource.hasInternalBatteries ? (batterySource.pluggedIn ? "Charging" : "Battery") : "Power"
-            subtitle: batterySource.hasInternalBatteries ? app.batteryText() : "Desktop"
+            title: batterySource.hasInternalBatteries ? (batterySource.pluggedIn ? i18n("Charging") : i18n("Battery")) : i18n("Power")
+            subtitle: batterySource.hasInternalBatteries ? app.batteryText() : i18n("Desktop")
             active: batterySource.pluggedIn
             accent: batterySource.percent <= 20 && batterySource.hasInternalBatteries ? "#ff453a" : "#34c759"
             progress: batterySource.hasInternalBatteries ? batterySource.percent : 100
             detailText: app.batteryText()
-            footerText: batterySource.hasInternalBatteries ? (batterySource.pluggedIn ? "Plugged in" : "Discharging") : "AC power"
+            footerText: batterySource.hasInternalBatteries ? (batterySource.pluggedIn ? i18n("Plugged in") : i18n("Discharging")) : i18n("AC power")
             actionIconName: "settings"
             onActionTriggered: app.launchPowerSettings()
         }
@@ -325,11 +332,11 @@ Rectangle {
             app: moduleCard.app
             iconName: batterySource.pluggedIn ? "battery-charging" : "battery"
             title: app.batteryText()
-            subtitle: batterySource.hasInternalBatteries ? (batterySource.pluggedIn ? "Charging" : "Remaining") : "Power"
+            subtitle: batterySource.hasInternalBatteries ? (batterySource.pluggedIn ? i18n("Charging") : i18n("Remaining")) : i18n("Power")
             active: batterySource.pluggedIn
             accent: batterySource.percent <= 20 && batterySource.hasInternalBatteries ? "#ff453a" : "#34c759"
             progress: batterySource.hasInternalBatteries ? batterySource.percent : 100
-            detailText: batterySource.pluggedIn ? "Charging" : "Power"
+            detailText: batterySource.pluggedIn ? i18n("Charging") : i18n("Power")
             actionIconName: "settings"
             onActionTriggered: app.launchPowerSettings()
         }
@@ -340,11 +347,11 @@ Rectangle {
             app: moduleCard.app
             iconName: app.powerProfileIcon()
             title: app.powerProfileTitle()
-            subtitle: "Power mode"
+            subtitle: i18n("Power mode")
             active: true
             accent: "#ffd60a"
-            detailText: powerProfilesSource.profiles && powerProfilesSource.profiles.length > 1 ? "Click to cycle" : "Current profile"
-            footerText: powerProfilesSource.activeProfile
+            detailText: powerProfilesSource.profiles && powerProfilesSource.profiles.length > 1 ? i18n("Click to cycle") : i18n("Current profile")
+            footerText: app.powerProfileTitle()
             actionIconName: "settings"
             onActionTriggered: app.launchPowerSettings()
             onTriggered: app.cyclePowerProfile()
@@ -355,12 +362,12 @@ Rectangle {
         SimpleModuleTile {
             app: moduleCard.app
             iconName: "preferences-desktop-theme"
-            title: Brightness.DarkModeControl.darkMode ? "Dark" : "Light"
-            subtitle: "Appearance"
+            title: Brightness.DarkModeControl.darkMode ? i18n("Dark") : i18n("Light")
+            subtitle: i18n("Appearance")
             active: Brightness.DarkModeControl.darkMode
             accent: "#bf5af2"
-            detailText: "Desktop color scheme"
-            footerText: "Click to switch"
+            detailText: i18n("Desktop color scheme")
+            footerText: i18n("Click to switch")
             onTriggered: app.toggleAppearanceMode()
         }
     }
@@ -369,11 +376,11 @@ Rectangle {
         SimpleModuleTile {
             app: moduleCard.app
             iconName: "preferences-desktop-theme-global"
-            title: "Theme"
-            subtitle: "Global themes"
+            title: i18n("Theme")
+            subtitle: i18n("Global themes")
             active: false
             accent: "#bf5af2"
-            detailText: "Open KDE themes"
+            detailText: i18n("Open KDE themes")
             onTriggered: app.launchAppearanceSettings()
         }
     }
@@ -388,11 +395,11 @@ Rectangle {
         SimpleModuleTile {
             app: moduleCard.app
             iconName: "systemsettings"
-            title: "Settings"
-            subtitle: "System"
+            title: i18n("Settings")
+            subtitle: i18n("System")
             active: false
             accent: "#8e8eff"
-            detailText: "Open System Settings"
+            detailText: i18n("Open System Settings")
             onTriggered: app.launchSystemSettings()
         }
     }
@@ -402,7 +409,7 @@ Rectangle {
             app: moduleCard.app
             iconName: "unknown"
             title: moduleCard.moduleId
-            subtitle: "Unknown"
+            subtitle: i18n("Unknown")
             active: false
         }
     }

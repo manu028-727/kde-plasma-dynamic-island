@@ -14,6 +14,13 @@ Item {
     implicitWidth: compact ? (emphasized ? 26 : 24) : (emphasized ? 38 : 32)
     implicitHeight: implicitWidth
     opacity: enabled ? 1 : 0.42
+    activeFocusOnTab: enabled
+    Accessible.role: Accessible.Button
+    Accessible.name: tooltipText.length > 0 ? tooltipText : iconName
+    Accessible.onPressAction: clicked()
+    Keys.onSpacePressed: clicked()
+    Keys.onReturnPressed: clicked()
+    Keys.onEnterPressed: clicked()
     onIconNameChanged: glyph.requestPaint()
     onEnabledChanged: glyph.requestPaint()
     Component.onCompleted: glyph.requestPaint()
@@ -24,7 +31,7 @@ Item {
         anchors.fill: parent
         radius: height / 2
         color: mouse.pressed ? "#484852" : mouse.containsMouse || control.emphasized ? "#2d2d35" : "#17171d"
-        border.color: "#34343c"
+        border.color: control.activeFocus ? "#8e8eff" : "#34343c"
         border.width: 1
     }
 
@@ -339,10 +346,11 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         enabled: control.enabled
+        onPressed: control.forceActiveFocus()
         onClicked: control.clicked()
     }
 
-    QQC2.ToolTip.visible: mouse.containsMouse && control.tooltipText.length > 0
+    QQC2.ToolTip.visible: (mouse.containsMouse || control.activeFocus) && control.tooltipText.length > 0
     QQC2.ToolTip.text: control.tooltipText
     QQC2.ToolTip.delay: 350
 

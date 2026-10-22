@@ -2,6 +2,18 @@
 
 All notable user-facing changes should be documented here.
 
+## 0.3.2
+
+- Added Node regression tests for notification text parsing, entity decoding, and emoji-safe truncation, and included the existing network/QML tests in the repository.
+- Added push and pull-request CI for tests, QML/JS linting, package validation, and release metadata checks.
+- Reduced background connectivity polling so `bluetoothctl`, `nmcli`, and `kdeconnect-cli` only run while the control center is open.
+- Stopped the popup from stealing keyboard focus when the pointer passes over it, while keeping click-to-focus and outside-click dismissal.
+- Bounded persisted control-center layout rows and aligned palette module sizes with the default layout.
+- Made volume handling consistent up to 150% and kept tile settings actions usable when a slider's device is unavailable.
+- Fixed suspended job artwork still animating, notification ordering not reflecting the newest item, HTML entity decoding in notification titles, and device lists dropping entries after the first three.
+- Added accessible names, roles, keyboard activation, and focus indicators to core controls, plus i18n coverage for remaining UI strings.
+- Rounded notification images with the same corner treatment as artwork thumbnails, and fixed a fallback-icon margin binding loop.
+
 ## 0.3.1
 
 - Added concrete first-fit placement when adding control center modules by clicking them in the edit palette.

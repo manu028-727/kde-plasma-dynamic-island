@@ -84,6 +84,7 @@ Item {
             IslandButton {
                 iconName: "media-skip-backward"
                 compact: true
+                tooltipText: i18n("Previous")
                 enabled: musicPage.hasPlayer && musicPage.app.player.canGoPrevious
                 onClicked: musicPage.app.mediaPrevious()
             }
@@ -92,6 +93,7 @@ Item {
                 iconName: musicPage.hasPlayer && musicPage.app.isPlaying ? "media-playback-pause" : "media-playback-start"
                 compact: true
                 emphasized: true
+                tooltipText: musicPage.hasPlayer && musicPage.app.isPlaying ? i18n("Pause") : i18n("Play")
                 enabled: musicPage.hasPlayer && (musicPage.app.player.canPlay || musicPage.app.player.canPause)
                 onClicked: musicPage.app.mediaPlayPause()
             }
@@ -99,6 +101,7 @@ Item {
             IslandButton {
                 iconName: "media-skip-forward"
                 compact: true
+                tooltipText: i18n("Next")
                 enabled: musicPage.hasPlayer && musicPage.app.player.canGoNext
                 onClicked: musicPage.app.mediaNext()
             }

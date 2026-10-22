@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import org.kde.kirigami as Kirigami
 
 Item {
@@ -21,12 +22,29 @@ Item {
     }
 
     Kirigami.Icon {
+        id: notificationIcon
+
         anchors.fill: parent
-        anchors.margins: visual.hasSource ? 0 : Math.max(3, Math.min(width, height) * 0.18)
+        anchors.margins: visual.hasSource ? 0 : Math.max(3, Math.min(visual.width, visual.height) * 0.18)
         source: visual.effectiveSource
         fallback: typeof visual.fallbackSource === "string" && visual.fallbackSource.length > 0 ? visual.fallbackSource : "notifications"
         color: visual.hasSource ? "transparent" : visual.fallbackColor
         isMask: !visual.hasSource && visual.fallbackColor.a > 0
         roundToIconSize: false
+        layer.enabled: visual.hasSource
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSpreadAtMax: 1
+            maskSpreadAtMin: 1
+            maskThresholdMin: 0.5
+            maskSource: ShaderEffectSource {
+                sourceItem: Rectangle {
+                    width: notificationIcon.width
+                    height: notificationIcon.height
+                    radius: visual.cornerRadius
+                    color: "#ffffff"
+                }
+            }
+        }
     }
 }

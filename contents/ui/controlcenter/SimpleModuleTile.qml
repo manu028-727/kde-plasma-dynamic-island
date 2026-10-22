@@ -32,13 +32,22 @@ MouseArea {
     anchors.fill: parent
     hoverEnabled: true
     enabled: !app.controlEditMode
+    activeFocusOnTab: enabled
+    Accessible.role: Accessible.Button
+    Accessible.name: simpleTile.title.length > 0 ? simpleTile.title : simpleTile.iconName
+    Accessible.description: simpleTile.subtitle + (simpleTile.detailText.length > 0 ? ". " + simpleTile.detailText : "")
+    Accessible.onPressAction: simpleTile.triggered()
+    Keys.onSpacePressed: simpleTile.triggered()
+    Keys.onReturnPressed: simpleTile.triggered()
+    Keys.onEnterPressed: simpleTile.triggered()
+    onPressed: simpleTile.forceActiveFocus()
     onClicked: simpleTile.triggered()
 
     Rectangle {
         anchors.fill: parent
         radius: Math.min(18, Math.min(width, height) / 2)
         color: !simpleTile.available ? "#12131a" : simpleTile.pressed ? "#242630" : simpleTile.containsMouse ? "#1a1b24" : simpleTile.active ? "#171821" : "#15161d"
-        border.color: simpleTile.active && !simpleTile.iconOnly ? Qt.rgba(simpleTile.accent.r, simpleTile.accent.g, simpleTile.accent.b, 0.42) : "#2a2b35"
+        border.color: simpleTile.activeFocus ? "#8e8eff" : simpleTile.active && !simpleTile.iconOnly ? Qt.rgba(simpleTile.accent.r, simpleTile.accent.g, simpleTile.accent.b, 0.42) : "#2a2b35"
         border.width: 1
     }
 
@@ -142,10 +151,11 @@ MouseArea {
         height: 26
         compact: true
         iconName: simpleTile.actionIconName
+        tooltipText: typeof i18n === "function" ? i18n("Open settings") : "Open settings"
         onClicked: simpleTile.actionTriggered()
     }
 
-    QQC2.ToolTip.visible: simpleTile.containsMouse && (simpleTile.detailText.length > 0 || simpleTile.footerText.length > 0)
+    QQC2.ToolTip.visible: (simpleTile.containsMouse || simpleTile.activeFocus) && (simpleTile.detailText.length > 0 || simpleTile.footerText.length > 0)
     QQC2.ToolTip.text: simpleTile.title + (simpleTile.subtitle.length > 0 ? " - " + simpleTile.subtitle : "") + (simpleTile.detailText.length > 0 ? "\n" + simpleTile.detailText : "")
     QQC2.ToolTip.delay: 350
 }

@@ -2,21 +2,21 @@
 
 const modules = [
     { "id": "userPower", "name": "User + Power", "icon": "user-identity", "defaultW": 6, "defaultH": 2, "maxH": 3 },
-    { "id": "volume", "name": "Volume", "icon": "audio-volume-high", "defaultW": 8, "defaultH": 2 },
-    { "id": "brightness", "name": "Brightness", "icon": "brightness-high", "defaultW": 8, "defaultH": 2 },
+    { "id": "volume", "name": "Volume", "icon": "audio-volume-high", "defaultW": 1, "defaultH": 4 },
+    { "id": "brightness", "name": "Brightness", "icon": "brightness-high", "defaultW": 1, "defaultH": 4 },
     { "id": "wifi", "name": "Wi-Fi", "icon": "network-wireless-on", "disabledIcon": "network-wireless-off", "defaultW": 2, "defaultH": 2 },
-    { "id": "wifiDevices", "name": "Network", "icon": "network-wireless-acquiring", "defaultW": 4, "defaultH": 2 },
+    { "id": "wifiDevices", "name": "Network", "icon": "network-wireless-acquiring", "defaultW": 4, "defaultH": 3 },
     { "id": "bluetooth", "name": "Bluetooth", "icon": "preferences-system-bluetooth", "defaultW": 2, "defaultH": 2 },
-    { "id": "bluetoothDiscovery", "name": "Bluetooth Discovery", "icon": "preferences-system-bluetooth", "defaultW": 4, "defaultH": 2 },
-    { "id": "notifications", "name": "Notifications", "icon": "notifications", "defaultW": 4, "defaultH": 4, "minW": 2, "minH": 2 },
+    { "id": "bluetoothDiscovery", "name": "Bluetooth Discovery", "icon": "preferences-system-bluetooth", "defaultW": 4, "defaultH": 3 },
+    { "id": "notifications", "name": "Notifications", "icon": "notifications", "defaultW": 8, "defaultH": 6, "minW": 2, "minH": 2 },
     { "id": "batteryStatus", "name": "Battery Status", "icon": "battery", "chargingIcon": "battery-charging", "defaultW": 2, "defaultH": 2 },
     { "id": "batteryPercent", "name": "Battery %", "icon": "battery", "chargingIcon": "battery-charging", "defaultW": 2, "defaultH": 2 },
     { "id": "powerMode", "name": "Power Mode", "icon": "battery-profile-balanced", "defaultW": 2, "defaultH": 2 },
     { "id": "appearanceMode", "name": "Light / Dark", "icon": "preferences-desktop-theme", "defaultW": 2, "defaultH": 2 },
     { "id": "theme", "name": "Theme", "icon": "preferences-desktop-theme-global", "defaultW": 2, "defaultH": 2 },
-    { "id": "media", "name": "Media", "icon": "multimedia-player", "defaultW": 8, "defaultH": 4, "minW": 2, "minH": 2 },
-    { "id": "kdeConnect", "name": "KDE Connect", "icon": "kdeconnect", "defaultW": 2, "defaultH": 2 },
-    { "id": "settings", "name": "Settings", "icon": "systemsettings", "defaultW": 2, "defaultH": 2 }
+    { "id": "media", "name": "Media", "icon": "multimedia-player", "defaultW": 6, "defaultH": 3, "minW": 2, "minH": 2 },
+    { "id": "kdeConnect", "name": "KDE Connect", "icon": "kdeconnect", "defaultW": 8, "defaultH": 4 },
+    { "id": "settings", "name": "Settings", "icon": "systemsettings", "defaultW": 2, "defaultH": 1 }
 ];
 
 const defaultLayoutItems = [

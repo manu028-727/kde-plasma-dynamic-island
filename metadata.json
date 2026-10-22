@@ -14,7 +14,9 @@
         "Id": "com.manu028.dynamicisland",
         "License": "GPL-3.0-or-later",
         "Name": "Dynamic Island",
-        "Version": "0.3.1"
+        "Version": "0.3.2",
+        "Website": "https://github.com/manu028-727/kde-plasma-dynamic-island",
+        "BugReportUrl": "https://github.com/manu028-727/kde-plasma-dynamic-island/issues"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }

@@ -13,7 +13,7 @@
         "Id": "com.manu028.dynamicisland.panel",
         "License": "GPL-3.0-or-later",
         "Name": "Dynamic Island Panel",
-        "Website": "https://store.kde.org/"
+        "Website": "https://github.com/manu028-727/kde-plasma-dynamic-island"
     },
     "X-Plasma-ContainmentCategories": [
         "panel"

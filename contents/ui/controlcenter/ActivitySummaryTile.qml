@@ -33,6 +33,8 @@ Rectangle {
     border.color: "#202129"
     border.width: 1
     clip: true
+    Accessible.role: Accessible.Grouping
+    Accessible.name: activitySummary.showAnyActivity ? app.primaryText() + ". " + app.secondaryText() : i18n("No activity")
 
     RowLayout {
         visible: !activitySummary.iconOnly
@@ -64,7 +66,7 @@ Rectangle {
                     spacing: 2
                     PlasmaLabel {
                         Layout.fillWidth: true
-                        text: activitySummary.showAnyActivity ? app.primaryText() : activitySummary.mediaOnly ? "Nothing playing" : "Ready"
+                        text: activitySummary.showAnyActivity ? app.primaryText() : activitySummary.mediaOnly ? i18n("Nothing playing") : i18n("Ready")
                         color: "#ffffff"
                         font.pixelSize: activitySummary.compact ? 12 : 15
                         font.weight: Font.Bold
@@ -73,7 +75,7 @@ Rectangle {
                     }
                     PlasmaLabel {
                         Layout.fillWidth: true
-                        text: activitySummary.showAnyActivity ? app.secondaryText() : activitySummary.mediaOnly ? "" : "Media, notifications and jobs"
+                        text: activitySummary.showAnyActivity ? app.secondaryText() : activitySummary.mediaOnly ? "" : i18n("Media, notifications and jobs")
                         color: "#9b9ba6"
                         font.pixelSize: activitySummary.compact ? 10 : 11
                         elide: Text.ElideRight
@@ -106,13 +108,13 @@ Rectangle {
                 RowLayout {
                     visible: app.hasPlayer
                     spacing: 8
-                    IslandButton { iconName: "media-skip-backward"; compact: true; enabled: app.player && app.player.canGoPrevious; onClicked: activitySummary.previous() }
-                    IslandButton { iconName: app.isPlaying ? "media-playback-pause" : "media-playback-start"; compact: true; emphasized: true; enabled: app.player && (app.player.canPlay || app.player.canPause); onClicked: activitySummary.playPause() }
-                    IslandButton { iconName: "media-skip-forward"; compact: true; enabled: app.player && app.player.canGoNext; onClicked: activitySummary.next() }
+                    IslandButton { iconName: "media-skip-backward"; compact: true; tooltipText: i18n("Previous"); enabled: app.player && app.player.canGoPrevious; onClicked: activitySummary.previous() }
+                    IslandButton { iconName: app.isPlaying ? "media-playback-pause" : "media-playback-start"; compact: true; emphasized: true; tooltipText: app.isPlaying ? i18n("Pause") : i18n("Play"); enabled: app.player && (app.player.canPlay || app.player.canPause); onClicked: activitySummary.playPause() }
+                    IslandButton { iconName: "media-skip-forward"; compact: true; tooltipText: i18n("Next"); enabled: app.player && app.player.canGoNext; onClicked: activitySummary.next() }
                 }
                 PlasmaLabel {
                     Layout.fillWidth: true
-                    text: activitySummary.mediaOnly ? app.hasPlayer ? app.player.identity || "Media player" : "" : app.hasJobs ? "Download active" : app.hasNotifications ? notificationsSource.unreadNotificationsCount + " unread" : "No activity"
+                    text: activitySummary.mediaOnly ? app.hasPlayer ? app.player.identity || i18n("Media player") : "" : app.hasJobs ? i18n("Download active") : app.hasNotifications ? i18np("%1 unread", "%1 unread", notificationsSource.unreadNotificationsCount) : i18n("No activity")
                     color: "#8f9099"
                     font.pixelSize: 10
                     horizontalAlignment: Text.AlignRight

@@ -467,7 +467,7 @@ Item {
 
         PlasmaLabel {
             Layout.fillWidth: true
-            text: app.controlEditMode ? app.controlLayoutDirty ? "Edit control center *" : "Edit control center" : "Control center"
+            text: app.controlEditMode ? app.controlLayoutDirty ? i18n("Edit control center *") : i18n("Edit control center") : i18n("Control center")
             color: "#f8f8fb"
             font.pixelSize: 13
             font.weight: Font.Bold
@@ -478,7 +478,7 @@ Item {
         PlasmaLabel {
             visible: app.controlEditMode
             Layout.maximumWidth: 150
-            text: app.controlLayoutDirty ? "Unsaved" : "Saved"
+            text: app.controlLayoutDirty ? i18n("Unsaved") : i18n("Saved")
             color: app.controlLayoutDirty ? "#ffd60a" : "#8f9099"
             font.pixelSize: 10
             font.weight: Font.Bold
@@ -489,7 +489,7 @@ Item {
             visible: !app.controlEditMode
             iconName: "document-edit"
             compact: true
-            tooltipText: "Edit layout"
+            tooltipText: i18n("Edit layout")
             onClicked: app.beginControlEdit()
         }
 
@@ -498,7 +498,7 @@ Item {
             iconName: "dialog-cancel"
             compact: true
             emphasized: app.controlLayoutDirty
-            tooltipText: app.controlLayoutDirty ? "Cancel changes" : "Exit edit mode"
+            tooltipText: app.controlLayoutDirty ? i18n("Cancel changes") : i18n("Exit edit mode")
             onClicked: app.cancelControlEdit()
         }
 
@@ -506,7 +506,7 @@ Item {
             visible: app.controlEditMode
             iconName: "restore-defaults"
             compact: true
-            tooltipText: "Reset draft to default"
+            tooltipText: i18n("Reset draft to default")
             onClicked: app.resetControlLayout()
         }
 
@@ -516,7 +516,7 @@ Item {
             compact: true
             enabled: app.controlLayoutDirty
             emphasized: app.controlLayoutDirty
-            tooltipText: app.controlLayoutDirty ? "Save layout" : "No changes"
+            tooltipText: app.controlLayoutDirty ? i18n("Save layout") : i18n("No changes")
             onClicked: app.saveControlEdit()
         }
     }
@@ -622,7 +622,7 @@ Item {
 
             PlasmaLabel {
                 Layout.fillWidth: true
-                text: "Modules"
+                text: i18n("Modules")
                 color: "#f8f8fb"
                 font.pixelSize: 12
                 font.weight: Font.Bold
@@ -630,7 +630,7 @@ Item {
 
             PlasmaLabel {
                 Layout.fillWidth: true
-                text: app.controlDropOnPalette ? "Release to hide this tile." : "Drag into the grid. Drop here to hide."
+                text: app.controlDropOnPalette ? i18n("Release to hide this tile.") : i18n("Drag into the grid. Drop here to hide.")
                 color: app.controlDropOnPalette ? "#d8d8ff" : "#8f9099"
                 font.pixelSize: 9
                 wrapMode: Text.WordWrap
@@ -727,7 +727,7 @@ Item {
         implicitHeight: 42
         radius: 13
         color: paletteDrag.pressed ? "#2b2c35" : app.controlDropOnPalette ? "#25263a" : "#171820"
-        border.color: app.controlDropOnPalette ? "#8e8eff" : "#2a2b35"
+        border.color: paletteDrag.activeFocus ? "#8e8eff" : app.controlDropOnPalette ? "#8e8eff" : "#2a2b35"
         border.width: 1
         opacity: app.controlDragActive && app.controlDragSource === paletteModule ? 0.48 : 1
 
@@ -763,6 +763,13 @@ Item {
 
             anchors.fill: parent
             hoverEnabled: true
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: paletteModule.title
+            Accessible.onPressAction: editor.addModuleAtFirstAvailableCell(paletteModule.moduleId)
+            Keys.onSpacePressed: editor.addModuleAtFirstAvailableCell(paletteModule.moduleId)
+            Keys.onReturnPressed: editor.addModuleAtFirstAvailableCell(paletteModule.moduleId)
+            Keys.onEnterPressed: editor.addModuleAtFirstAvailableCell(paletteModule.moduleId)
             drag.threshold: 8
             preventStealing: true
             onClicked: {
