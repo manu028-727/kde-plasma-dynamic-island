@@ -30,15 +30,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends qt6-declarative-dev-tools
 
-      - name: Lint QML and JavaScript
+      - name: Check QML and JavaScript syntax
         run: |
           # Ubuntu installs Qt 6 tools under /usr/lib/qt6/bin instead of putting
           # them on PATH like most distributions do.
           export PATH="/usr/lib/qt6/bin:$PATH"
-          command -v qmllint
-          qmllint contents/ui/*.qml contents/ui/*.js \
-            contents/ui/activities/*.qml \
-            contents/ui/controlcenter/*.qml contents/ui/controlcenter/*.js
+
+          # qmlformat only parses syntax, so it does not need the Plasma 6 QML
+          # modules that are unavailable in Ubuntu's Qt 6.4 packages.
+          for file in contents/ui/*.qml \
+                      contents/ui/activities/*.qml \
+                      contents/ui/controlcenter/*.qml; do
+            qmlformat "$file" > /dev/null
+          done
+
+          # qmllint cannot process multiple JavaScript files in one invocation.
+          for file in contents/ui/*.js contents/ui/controlcenter/*.js; do
+            qmllint "$file"
+          done
 
       - name: Build and validate package
         run: |

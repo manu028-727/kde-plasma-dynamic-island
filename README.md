@@ -114,13 +114,20 @@ node tests/network-state.test.cjs
 node tests/text-utils.test.cjs
 ```
 
-QML syntax can be checked with Qt's `qmllint` when the Qt 6 declarative tools are installed:
+QML and JavaScript syntax can be checked with the Qt 6 declarative tools. `qmlformat` validates QML syntax without requiring a Plasma session or the Plasma QML modules; `qmllint` checks the JavaScript helpers one file at a time:
 
 ```bash
-qmllint contents/ui/*.qml contents/ui/*.js \
-  contents/ui/activities/*.qml \
-  contents/ui/controlcenter/*.qml contents/ui/controlcenter/*.js
+for file in contents/ui/*.qml \
+            contents/ui/activities/*.qml \
+            contents/ui/controlcenter/*.qml; do
+  qmlformat "$file" > /dev/null
+done
+for file in contents/ui/*.js contents/ui/controlcenter/*.js; do
+  qmllint "$file"
+done
 ```
+
+On Ubuntu, add `/usr/lib/qt6/bin` to `PATH` first, because the package does not expose the Qt tools globally.
 
 Build the installable archive with the same script used by CI:
 

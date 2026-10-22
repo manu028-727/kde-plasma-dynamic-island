@@ -9,9 +9,14 @@ Use this before publishing a new GitHub release or KDE Store update.
    ```bash
    node tests/network-state.test.cjs
    node tests/text-utils.test.cjs
-   qmllint contents/ui/*.qml contents/ui/*.js \
-     contents/ui/activities/*.qml \
-     contents/ui/controlcenter/*.qml contents/ui/controlcenter/*.js
+   for file in contents/ui/*.qml \
+               contents/ui/activities/*.qml \
+               contents/ui/controlcenter/*.qml; do
+     qmlformat "$file" > /dev/null
+   done
+   for file in contents/ui/*.js contents/ui/controlcenter/*.js; do
+     qmllint "$file"
+   done
    scripts/package.sh
    unzip -t dynamic-island-*.plasmoid
    ```
