@@ -32,6 +32,10 @@ jobs:
 
       - name: Lint QML and JavaScript
         run: |
+          # Ubuntu installs Qt 6 tools under /usr/lib/qt6/bin instead of putting
+          # them on PATH like most distributions do.
+          export PATH="/usr/lib/qt6/bin:$PATH"
+          command -v qmllint
           qmllint contents/ui/*.qml contents/ui/*.js \
             contents/ui/activities/*.qml \
             contents/ui/controlcenter/*.qml contents/ui/controlcenter/*.js
